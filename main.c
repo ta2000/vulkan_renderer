@@ -285,16 +285,19 @@ int main() {
         window
     );
 
-	const char* device_extensions[] = {
+    engine->deviceExtensions[engine->deviceExtensionCount] =
+        calloc(1, strlen(VK_KHR_SWAPCHAIN_EXTENSION_NAME)+1);
+    strcpy(
+        engine->deviceExtensions[engine->deviceExtensionCount++],
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
-    uint32_t device_extension_count = 1;
+    );
+
     engine->physicalDevice = renderer_get_physical_device(
 		engine,
         engine->instance,
         engine->surface,
-        device_extension_count,
-        device_extensions
+        engine->deviceExtensionCount,
+        (const char**)engine->deviceExtensions
     );
 
     createLogicalDevice(engine);
