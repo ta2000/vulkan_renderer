@@ -233,12 +233,14 @@ VkPresentModeKHR chooseSwapPresentMode(
 VkExtent2D chooseSwapExtent(
     const VkSurfaceCapabilitiesKHR* capabilities
 );
-struct QueueFamilyIndices findQueueFamilies(
-    struct Engine* engine,
-    VkPhysicalDevice* physicalDevice
-);
-_Bool queueFamilyComplete(struct QueueFamilyIndices* indices);
 void createLogicalDevice(struct Engine* engine);
+uint32_t renderer_get_graphics_queue(
+	VkPhysicalDevice physical_device
+);
+uint32_t renderer_get_present_queue(
+	VkPhysicalDevice physical_device,
+	VkSurfaceKHR surface
+);
 void createSwapChain(struct Engine* engine);
 void createImageViews(struct Engine* engine);
 void createRenderPass(struct Engine* engine);
@@ -298,6 +300,15 @@ int main() {
         engine->surface,
         engine->deviceExtensionCount,
         (const char**)engine->deviceExtensions
+    );
+
+	engine->indices.graphicsFamily = renderer_get_graphics_queue(
+		engine->physicalDevice
+    );
+
+    engine->indices.presentFamily = renderer_get_present_queue(
+        engine->physicalDevice,
+        engine->surface
     );
 
     createLogicalDevice(engine);
@@ -784,72 +795,6 @@ void freeSwapChainSupportDetails(struct SwapChainSupportDetails* details)
     }
 }
 
-struct QueueFamilyIndices findQueueFamilies(struct Engine* engine, VkPhysicalDevice* physicalDevice)
-{
-    struct QueueFamilyIndices indices = {
-        .graphicsFamily = -1,
-        .presentFamily = -1
-    };
-
-    // Get number of queue families
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(
-            *physicalDevice,
-            &queueFamilyCount,
-            NULL
-    );
-
-    // Create and fill array of VkQueueFamilyProperties
-    VkQueueFamilyProperties* queueFamilies = calloc(
-            queueFamilyCount,
-            sizeof(VkQueueFamilyProperties)
-    );
-    vkGetPhysicalDeviceQueueFamilyProperties(
-            *physicalDevice,
-            &queueFamilyCount,
-            queueFamilies
-    );
-
-    // Iterate over queue families to determine if any are usable
-    uint32_t i;
-    for (i=0; i<queueFamilyCount; i++)
-    {
-        // Check if queue family supports VK_QUEUE_GRAPHICS_BIT
-        if (queueFamilies[i].queueCount > 0 &&
-            (queueFamilies[i].queueFlags &
-            VK_QUEUE_GRAPHICS_BIT))
-        {
-            indices.graphicsFamily = i;
-        }
-
-        // Check if queue family is capable of presenting to window surface
-        VkBool32 presentSupport = 0;
-        vkGetPhysicalDeviceSurfaceSupportKHR(
-            *physicalDevice,
-            i,
-            engine->surface,
-            &presentSupport
-        );
-        if (queueFamilyCount > 0 && presentSupport)
-        {
-            indices.presentFamily = i;
-        }
-
-        // Stop once a usable queues are found
-        if (queueFamilyComplete(&indices))
-            break;
-    }
-
-    free(queueFamilies);
-
-    return indices;
-}
-
-_Bool queueFamilyComplete(struct QueueFamilyIndices* indices)
-{
-    return indices->graphicsFamily >= 0 && indices->presentFamily >= 0;
-}
-
 void createLogicalDevice(struct Engine* engine)
 {
     VkDeviceQueueCreateInfo queueCreateInfos[2];
@@ -916,6 +861,99 @@ void createLogicalDevice(struct Engine* engine)
         0,
         &(engine->presentQueue)
     );
+}
+
+uint32_t renderer_get_graphics_queue(
+        VkPhysicalDevice physical_device)
+{
+    uint32_t graphics_queue_index;
+
+    uint32_t queue_family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        physical_device,
+        &queue_family_count,
+        NULL
+    );
+
+    VkQueueFamilyProperties* queue_family_properties;
+    queue_family_properties = malloc(
+        queue_family_count * sizeof(*queue_family_properties)
+    );
+
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        physical_device,
+        &queue_family_count,
+        queue_family_properties
+    );
+
+    uint32_t i;
+    bool graphics_queue_found = false;
+    for (i=0; i<queue_family_count; i++)
+    {
+        if (queue_family_properties[i].queueCount > 0 &&
+            queue_family_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            graphics_queue_index = i;
+            graphics_queue_found = true;
+            break;
+        }
+    }
+    assert(graphics_queue_found);
+
+    free(queue_family_properties);
+
+    return graphics_queue_index;
+}
+
+uint32_t renderer_get_present_queue(
+        VkPhysicalDevice physical_device,
+        VkSurfaceKHR surface)
+{
+    uint32_t present_queue_index;
+
+    uint32_t queue_family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        physical_device,
+        &queue_family_count,
+        NULL
+    );
+
+    VkQueueFamilyProperties* queue_family_properties;
+    queue_family_properties = malloc(
+        queue_family_count * sizeof(*queue_family_properties)
+    );
+
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        physical_device,
+        &queue_family_count,
+        queue_family_properties
+    );
+
+    uint32_t i;
+    VkBool32 wsi_support;
+    bool present_queue_found = false;
+    for (i=0; i<queue_family_count; i++)
+    {
+        VkResult wsi_query_result;
+        wsi_query_result = vkGetPhysicalDeviceSurfaceSupportKHR(
+            physical_device,
+            i,
+            surface,
+            &wsi_support
+        );
+        assert(wsi_query_result == VK_SUCCESS);
+
+        if (wsi_support) {
+            present_queue_index = i;
+            present_queue_found = true;
+            break;
+        }
+    }
+    assert(present_queue_found);
+
+    free(queue_family_properties);
+
+    return present_queue_index;
 }
 
 void createSwapChain(struct Engine* engine)
