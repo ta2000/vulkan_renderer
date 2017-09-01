@@ -233,7 +233,13 @@ VkPresentModeKHR chooseSwapPresentMode(
 VkExtent2D chooseSwapExtent(
     const VkSurfaceCapabilitiesKHR* capabilities
 );
-void createLogicalDevice(struct Engine* engine);
+VkDevice renderer_get_device(
+    VkPhysicalDevice physical_device,
+    VkSurfaceKHR surface,
+    VkPhysicalDeviceFeatures* required_features,
+    uint32_t device_extension_count,
+    const char** device_extensions
+);
 uint32_t renderer_get_graphics_queue(
 	VkPhysicalDevice physical_device
 );
@@ -305,13 +311,32 @@ int main() {
 	engine->indices.graphicsFamily = renderer_get_graphics_queue(
 		engine->physicalDevice
     );
-
     engine->indices.presentFamily = renderer_get_present_queue(
         engine->physicalDevice,
         engine->surface
     );
 
-    createLogicalDevice(engine);
+    engine->device = renderer_get_device(
+        engine->physicalDevice,
+        engine->surface,
+        NULL,
+        engine->deviceExtensionCount,
+        (const char**)engine->deviceExtensions
+    );
+
+    vkGetDeviceQueue(
+        engine->device,
+        engine->indices.graphicsFamily,
+        0,
+        &(engine->graphicsQueue)
+    );
+    vkGetDeviceQueue(
+        engine->device,
+        engine->indices.presentFamily,
+        0,
+        &(engine->presentQueue)
+    );
+
     createSwapChain(engine);
     createImageViews(engine);
     createRenderPass(engine);
@@ -795,72 +820,79 @@ void freeSwapChainSupportDetails(struct SwapChainSupportDetails* details)
     }
 }
 
-void createLogicalDevice(struct Engine* engine)
+VkDevice renderer_get_device(
+        VkPhysicalDevice physical_device,
+        VkSurfaceKHR surface,
+        VkPhysicalDeviceFeatures* required_features,
+        uint32_t device_extension_count,
+        const char** device_extensions)
 {
-    VkDeviceQueueCreateInfo queueCreateInfos[2];
-    int uniqueQueueFamilies[2] = {
-        engine->indices.graphicsFamily,
-        engine->indices.presentFamily
-    };
+    VkDevice device_handle;
+    device_handle = VK_NULL_HANDLE;
 
-    float queuePriority = 1.0f;
-    int i;
-    for (i=0; i<2; i++)
-    {
-        queueCreateInfos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfos[i].pNext = NULL;
-        queueCreateInfos[i].flags = 0;
-        queueCreateInfos[i].queueFamilyIndex = uniqueQueueFamilies[i];
-        queueCreateInfos[i].queueCount = 1;
-        queueCreateInfos[i].pQueuePriorities = &queuePriority;
+    uint32_t graphics_family_index = renderer_get_graphics_queue(
+        physical_device
+    );
+    uint32_t present_family_index = renderer_get_present_queue(
+        physical_device,
+        surface
+    );
+
+    uint32_t device_queue_count = 2;
+    uint32_t device_queue_indices[] = {
+        graphics_family_index,
+        present_family_index
+    };
+    float device_queue_priorities[] = {1.0f, 1.0f};
+    VkDeviceQueueCreateFlags device_queue_flags[] = {0, 0};
+
+    VkDeviceQueueCreateInfo* device_queue_infos;
+    device_queue_infos = malloc(
+        sizeof(*device_queue_infos) * device_queue_count
+    );
+
+    uint32_t i;
+    for (i=0; i<device_queue_count; i++) {
+        VkDeviceQueueCreateInfo device_queue_info = {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = device_queue_flags[i],
+            .queueFamilyIndex = device_queue_indices[i],
+            .queueCount = 1,
+            .pQueuePriorities = &device_queue_priorities[i]
+        };
+        device_queue_infos[i] = device_queue_info;
     }
 
-    VkDeviceCreateInfo createInfo;
-    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pNext = NULL;
-    createInfo.flags = 0;
-    createInfo.pQueueCreateInfos = queueCreateInfos;
-    // Passing both pQueueCreateInfos when the indices are the
-    // same will result in a validation error
-    if (engine->indices.graphicsFamily == engine->indices.presentFamily)
-        createInfo.queueCreateInfoCount = 1;
-    else
-        createInfo.queueCreateInfoCount = 2;
-    createInfo.pEnabledFeatures = NULL;
-    createInfo.enabledExtensionCount = engine->deviceExtensionCount;
-    createInfo.ppEnabledExtensionNames = (const char* const*)engine->deviceExtensions;
+    VkDeviceCreateInfo device_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .pQueueCreateInfos = device_queue_infos,
+        .pEnabledFeatures = required_features,
+        .enabledLayerCount = 0,
+        .ppEnabledLayerNames = NULL,
+        .enabledExtensionCount = device_extension_count,
+        .ppEnabledExtensionNames = (const char* const*)device_extensions
+    };
 
-    // Deprecated, but causes valgrind error if missing
-    createInfo.enabledLayerCount = 0;
-    createInfo.ppEnabledLayerNames = NULL;
+    if (graphics_family_index == present_family_index)
+        device_info.queueCreateInfoCount = 1;
+    else
+        device_info.queueCreateInfoCount = 2;
 
     VkResult result;
     result = vkCreateDevice(
-        engine->physicalDevice,
-        &createInfo,
+        physical_device,
+        &device_info,
         NULL,
-        &(engine->device)
+        &device_handle
     );
+    assert(result == VK_SUCCESS);
 
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create logical device.\n");
-        exit(-1);
-    }
+    free(device_queue_infos);
 
-    vkGetDeviceQueue(
-        engine->device,
-        engine->indices.graphicsFamily,
-        0,
-        &(engine->graphicsQueue)
-    );
-
-    vkGetDeviceQueue(
-        engine->device,
-        engine->indices.presentFamily,
-        0,
-        &(engine->presentQueue)
-    );
+    return device_handle;
 }
 
 uint32_t renderer_get_graphics_queue(
