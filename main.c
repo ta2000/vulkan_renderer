@@ -17,6 +17,9 @@
 #define APP_VERSION_MINOR 0
 #define APP_VERSION_PATCH 0
 
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
 struct QueueFamilyIndices
 {
     int graphicsFamily;
@@ -222,16 +225,19 @@ struct SwapChainSupportDetails querySwapChainSupport(
     struct Engine* engine,
     VkPhysicalDevice* physicalDevice
 );
-VkSurfaceFormatKHR chooseSwapSurfaceFormat(
-    VkSurfaceFormatKHR* availableFormats,
-    int formatCount
+VkSurfaceFormatKHR renderer_get_image_format(
+	VkPhysicalDevice physical_device,
+	VkSurfaceKHR surface
 );
 VkPresentModeKHR chooseSwapPresentMode(
     VkPresentModeKHR* availablePresentModes,
     int presentModeCount
 );
-VkExtent2D chooseSwapExtent(
-    const VkSurfaceCapabilitiesKHR* capabilities
+VkExtent2D renderer_get_swapchain_extent(
+    VkPhysicalDevice physical_device,
+    VkSurfaceKHR surface,
+    uint32_t window_width,
+    uint32_t window_height
 );
 VkDevice renderer_get_device(
     VkPhysicalDevice physical_device,
@@ -248,6 +254,18 @@ uint32_t renderer_get_present_queue(
 	VkSurfaceKHR surface
 );
 void createSwapChain(struct Engine* engine);
+VkSwapchainKHR renderer_get_swapchain(
+	VkPhysicalDevice physical_device,
+	VkDevice device,
+	VkSurfaceKHR surface,
+	VkSurfaceFormatKHR image_format,
+	VkExtent2D swapchain_extent,
+	VkSwapchainKHR old_swapchain
+);
+uint32_t renderer_get_swapchain_image_count(
+	VkDevice device,
+	VkSwapchainKHR swapchain
+);
 void createImageViews(struct Engine* engine);
 void createRenderPass(struct Engine* engine);
 char* readFile(const char* fname, uint32_t* fsize);
@@ -337,7 +355,44 @@ int main() {
         &(engine->presentQueue)
     );
 
-    createSwapChain(engine);
+    VkSurfaceFormatKHR surfaceFormat;
+    surfaceFormat = renderer_get_image_format(
+		engine->physicalDevice,
+		engine->surface
+    );
+    engine->swapChainImageFormat = surfaceFormat.format;
+
+    engine->swapChainExtent = renderer_get_swapchain_extent(
+        engine->physicalDevice,
+        engine->surface,
+        WIDTH,
+        HEIGHT
+    );
+
+    engine->swapChain = renderer_get_swapchain(
+        engine->physicalDevice,
+        engine->device,
+        engine->surface,
+        surfaceFormat,
+        engine->swapChainExtent,
+        VK_NULL_HANDLE
+    );
+
+    engine->imageCount = renderer_get_swapchain_image_count(
+        engine->device,
+        engine->swapChain
+    );
+
+    engine->swapChainImages = malloc(
+        engine->imageCount * sizeof(*engine->swapChainImages)
+    );
+    vkGetSwapchainImagesKHR(
+        engine->device,
+        engine->swapChain,
+        &engine->imageCount,
+        engine->swapChainImages
+    );
+
     createImageViews(engine);
     createRenderPass(engine);
     createGraphicsPipeline(engine);
@@ -988,123 +1043,213 @@ uint32_t renderer_get_present_queue(
     return present_queue_index;
 }
 
-void createSwapChain(struct Engine* engine)
+VkSwapchainKHR renderer_get_swapchain(
+        VkPhysicalDevice physical_device,
+        VkDevice device,
+        VkSurfaceKHR surface,
+        VkSurfaceFormatKHR image_format,
+        VkExtent2D swapchain_extent,
+        VkSwapchainKHR old_swapchain)
 {
-    struct SwapChainSupportDetails swapChainSupport;
-    swapChainSupport = querySwapChainSupport(engine, &(engine->physicalDevice));
+    VkSwapchainKHR swapchain_handle;
+    swapchain_handle = VK_NULL_HANDLE;
 
-    VkSurfaceFormatKHR surfaceFormat;
-    surfaceFormat = chooseSwapSurfaceFormat(
-        swapChainSupport.formats,
-        swapChainSupport.formatCount
+    // Determine image count (maxImageCount 0 == no limit)
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    VkResult result;
+    result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        physical_device,
+        surface,
+        &surface_capabilities
     );
+    assert(result == VK_SUCCESS);
 
-    VkPresentModeKHR presentMode;
-    presentMode = chooseSwapPresentMode(
-        swapChainSupport.presentModes,
-        swapChainSupport.presentModeCount
-    );
-
-    VkExtent2D extent = chooseSwapExtent(&(swapChainSupport.capabilities));
-
-    // 0 max image count == no limit
-    engine->imageCount = swapChainSupport.capabilities.minImageCount+1;
-    if (swapChainSupport.capabilities.minImageCount > 0 &&
-        engine->imageCount > swapChainSupport.capabilities.maxImageCount)
-            engine->imageCount = swapChainSupport.capabilities.maxImageCount;
-
-    VkSwapchainCreateInfoKHR createInfo;
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.pNext = NULL;
-    createInfo.flags = 0;
-    createInfo.surface = engine->surface;
-    createInfo.minImageCount = engine->imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-    uint32_t queueFamilyIndices[] = {
-        engine->indices.graphicsFamily,
-        engine->indices.presentFamily
-    };
-
-    if (engine->indices.graphicsFamily != engine->indices.presentFamily)
+    uint32_t desired_image_count;
+    desired_image_count = surface_capabilities.minImageCount + 1;
+    if (desired_image_count > 0 &&
+        desired_image_count > surface_capabilities.maxImageCount)
     {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        desired_image_count = surface_capabilities.maxImageCount;
+    }
+
+    // Queue family indices
+    VkSharingMode sharing_mode;
+
+    uint32_t queue_family_count;
+    const uint32_t* queue_family_indices;
+
+    uint32_t graphics_family_index = renderer_get_graphics_queue(
+        physical_device
+    );
+    uint32_t present_family_index = renderer_get_present_queue(
+        physical_device,
+        surface
+    );
+
+    if (graphics_family_index != present_family_index)
+    {
+        sharing_mode = VK_SHARING_MODE_CONCURRENT;
+        queue_family_count = 2;
+        const uint32_t indices[] = {
+            graphics_family_index,
+            present_family_index
+        };
+        queue_family_indices = indices;
     }
     else
     {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;
-        createInfo.pQueueFamilyIndices = NULL;
+        sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
+        queue_family_count = 0;
+        queue_family_indices = NULL;
     }
 
-    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    // Find a present mode, ideally MAILBOX unless unavailable,
+    // in which case fall back to FIFO (always available)
+    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
-    VkResult result;
-    result = vkCreateSwapchainKHR(
-        engine->device,
-        &createInfo,
-        NULL,
-        &(engine->swapChain)
-    );
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create swapchain.\n");
-        exit(-1);
-    }
+    VkPresentModeKHR* present_modes;
+    uint32_t present_mode_count;
 
-    vkGetSwapchainImagesKHR(
-        engine->device,
-        engine->swapChain,
-        &(engine->imageCount),
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        physical_device,
+        surface,
+        &present_mode_count,
         NULL
     );
-    engine->swapChainImages = calloc(
-        engine->imageCount,
-        sizeof(*engine->swapChainImages)
-    );
-    vkGetSwapchainImagesKHR(
-        engine->device,
-        engine->swapChain,
-        &(engine->imageCount),
-        engine->swapChainImages
+
+    present_modes = malloc(present_mode_count * sizeof(*present_modes));
+
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        physical_device,
+        surface,
+        &present_mode_count,
+        present_modes
     );
 
-    engine->swapChainImageFormat = surfaceFormat.format;
-    engine->swapChainExtent = extent;
+    uint32_t i;
+    for (i=0; i<present_mode_count; i++)
+    {
+        if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            present_mode = present_modes[i];
+            break;
+        }
+    }
 
-    freeSwapChainSupportDetails(&swapChainSupport);
+    free(present_modes);
+
+    VkSwapchainCreateInfoKHR swapchain_info = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext = NULL,
+        .flags = 0,
+        .surface = surface,
+        .minImageCount = desired_image_count,
+        .imageFormat = image_format.format,
+        .imageColorSpace = image_format.colorSpace,
+        .imageExtent = swapchain_extent,
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = sharing_mode,
+        .queueFamilyIndexCount = queue_family_count,
+        .pQueueFamilyIndices = queue_family_indices,
+        .preTransform = surface_capabilities.currentTransform,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = present_mode,
+        .clipped = VK_TRUE,
+        .oldSwapchain = old_swapchain
+    };
+
+    result = vkCreateSwapchainKHR(
+        device,
+        &swapchain_info,
+        NULL,
+        &swapchain_handle
+    );
+    assert(result == VK_SUCCESS);
+
+    if (old_swapchain != VK_NULL_HANDLE)
+    {
+        vkDestroySwapchainKHR(
+            device,
+            old_swapchain,
+            NULL
+        );
+    }
+
+    return swapchain_handle;
 }
 
-VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, int formatCount)
+uint32_t renderer_get_swapchain_image_count(
+        VkDevice device,
+        VkSwapchainKHR swapchain)
 {
-    if (formatCount == 1 && availableFormats->format == VK_FORMAT_UNDEFINED)
+    uint32_t image_count;
+    vkGetSwapchainImagesKHR(
+        device,
+        swapchain,
+        &image_count,
+        NULL
+    );
+    return image_count;
+}
+
+VkSurfaceFormatKHR renderer_get_image_format(
+        VkPhysicalDevice physical_device,
+        VkSurfaceKHR surface)
+{
+    VkSurfaceFormatKHR image_format;
+
+    uint32_t format_count;
+    VkSurfaceFormatKHR* formats;
+    VkResult result;
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(
+        physical_device,
+        surface,
+        &format_count,
+        NULL
+    );
+    assert(result == VK_SUCCESS);
+    formats = malloc(format_count * sizeof(*formats));
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(
+        physical_device,
+        surface,
+        &format_count,
+        formats
+    );
+    assert(result == VK_SUCCESS);
+
+    // Free to choose any format
+    if (format_count == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
     {
-        VkSurfaceFormatKHR noPreferredFormat = {
-            .format = VK_FORMAT_B8G8R8A8_UNORM,
-            .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-        };
-        return noPreferredFormat;
+        image_format.format = VK_FORMAT_B8G8R8A8_UNORM;
+        image_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    }
+    // Limited selection of formats
+    else
+    {
+        uint32_t i;
+        bool ideal_format_found = false;
+        for (i=0; i<format_count; i++)
+        {
+            // Ideal format B8G8R8A8_UNORM, SRGB_NONLINEAR
+            if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM &&
+                formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            {
+                image_format = formats[i];
+                ideal_format_found = true;
+                break;
+            }
+        }
+
+        if (!ideal_format_found)
+        {
+            image_format = formats[0];
+        }
     }
 
-    int i;
-    for (i=0; i<formatCount; i++)
-    {
-        if (availableFormats[i].format == VK_FORMAT_B8G8R8A8_UNORM &&
-            availableFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-                return availableFormats[i];
-    }
+    free(formats);
 
-    return *availableFormats;
+    return image_format;
 }
 
 VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, int presentModeCount)
@@ -1119,24 +1264,40 @@ VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, 
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR* capabilities)
+VkExtent2D renderer_get_swapchain_extent(
+        VkPhysicalDevice physical_device,
+        VkSurfaceKHR surface,
+        uint32_t window_width,
+        uint32_t window_height)
 {
-    if (capabilities->currentExtent.width != UINT32_MAX)
+    // Determine extent (resolution of swapchain images)
+    VkExtent2D extent;
+    extent.width = window_width;
+    extent.height = window_height;
+
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    VkResult result;
+    result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        physical_device,
+        surface,
+        &surface_capabilities
+    );
+    assert(result == VK_SUCCESS);
+
+    if (surface_capabilities.currentExtent.width == UINT32_MAX)
     {
-        return capabilities->currentExtent;
+        extent.width = MAX(
+            surface_capabilities.minImageExtent.width,
+            MIN(surface_capabilities.maxImageExtent.width, extent.width)
+        );
+
+        extent.height = MAX(
+            surface_capabilities.minImageExtent.height,
+            MIN(surface_capabilities.maxImageExtent.height, extent.height)
+        );
     }
 
-    VkExtent2D actualExtent = {.width = WIDTH, .height = HEIGHT};
-    actualExtent.width = max(
-        capabilities->minImageExtent.width,
-        min(capabilities->maxImageExtent.width, actualExtent.width)
-    );
-    actualExtent.height = max(
-        capabilities->minImageExtent.height,
-        min(capabilities->maxImageExtent.height, actualExtent.height)
-    );
-
-    return actualExtent;
+    return extent;
 }
 
 void createImageViews(struct Engine* engine)
