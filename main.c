@@ -277,7 +277,10 @@ void createShaderModule(
     VkShaderModule* shaderModule
 );
 void createFrameBuffers(struct Engine* engine);
-void createCommandPool(struct Engine* engine);
+VkCommandPool renderer_get_command_pool(
+    VkPhysicalDevice physical_device,
+    VkDevice device
+);
 void createCommandBuffers(struct Engine* engine);
 void createSemaphores(struct Engine* engine);
 
@@ -393,11 +396,15 @@ int main() {
         engine->swapChainImages
     );
 
+    engine->commandPool = renderer_get_command_pool(
+        engine->physicalDevice,
+        engine->device
+    );
+
     createImageViews(engine);
     createRenderPass(engine);
     createGraphicsPipeline(engine);
     createFrameBuffers(engine);
-    createCommandPool(engine);
     createCommandBuffers(engine);
     createSemaphores(engine);
 
@@ -1703,27 +1710,34 @@ void createFrameBuffers(struct Engine* engine)
     }
 }
 
-void createCommandPool(struct Engine* engine)
+VkCommandPool renderer_get_command_pool(
+        VkPhysicalDevice physical_device,
+        VkDevice device)
 {
-    VkCommandPoolCreateInfo createInfo;
-    createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    createInfo.pNext = NULL;
-    createInfo.flags = 0; // Relates to reset frequency of command buffers
-    createInfo.queueFamilyIndex = engine->indices.graphicsFamily;
+    VkCommandPool command_pool_handle;
+    command_pool_handle = VK_NULL_HANDLE;
+
+    uint32_t graphics_family_index = renderer_get_graphics_queue(
+        physical_device
+    );
+
+    VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .queueFamilyIndex = graphics_family_index
+    };
 
     VkResult result;
     result = vkCreateCommandPool(
-        engine->device,
-        &createInfo,
+        device,
+        &command_pool_info,
         NULL,
-        &(engine->commandPool)
+        &command_pool_handle
     );
+    assert(result == VK_SUCCESS);
 
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create command pool.\n");
-        exit(-1);
-    }
+    return command_pool_handle;
 }
 
 void createCommandBuffers(struct Engine* engine)
