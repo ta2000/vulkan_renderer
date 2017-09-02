@@ -26,16 +26,6 @@ struct QueueFamilyIndices
     int presentFamily;
 };
 
-struct SwapChainSupportDetails
-{
-    VkSurfaceCapabilitiesKHR capabilities;
-    uint32_t formatCount;
-    VkSurfaceFormatKHR* formats;
-    uint32_t presentModeCount;
-    VkPresentModeKHR* presentModes;
-};
-void freeSwapChainSupportDetails(struct SwapChainSupportDetails* details);
-
 struct Engine
 {
     // Window
@@ -72,7 +62,6 @@ struct Engine
     VkImageView* imageViews;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
-    struct SwapChainSupportDetails swapChainDetails;
 
     // Render pass
     VkRenderPass renderPass;
@@ -175,8 +164,6 @@ void EngineDestroy(struct Engine* self)
         }
     }
 
-    freeSwapChainSupportDetails(&(self->swapChainDetails));
-
     vkDestroySwapchainKHR(self->device, self->swapChain, NULL);
     vkDestroyDevice(self->device, NULL);
     vkDestroySurfaceKHR(self->instance, self->surface, NULL);
@@ -221,10 +208,6 @@ bool physical_device_extensions_supported(
     uint32_t required_extension_count,
     const char** required_extensions
 );
-struct SwapChainSupportDetails querySwapChainSupport(
-    struct Engine* engine,
-    VkPhysicalDevice* physicalDevice
-);
 VkSurfaceFormatKHR renderer_get_image_format(
 	VkPhysicalDevice physical_device,
 	VkSurfaceKHR surface
@@ -253,7 +236,6 @@ uint32_t renderer_get_present_queue(
 	VkPhysicalDevice physical_device,
 	VkSurfaceKHR surface
 );
-void createSwapChain(struct Engine* engine);
 VkSwapchainKHR renderer_get_swapchain(
 	VkPhysicalDevice physical_device,
 	VkDevice device,
@@ -763,8 +745,6 @@ VkPhysicalDevice renderer_get_physical_device(
         break;
     }
 
-	querySwapChainSupport(engine, &physical_device_handle);
-
     return physical_device_handle;
 }
 
@@ -814,72 +794,6 @@ bool physical_device_extensions_supported(
     }
 
     return true;
-}
-
-struct SwapChainSupportDetails querySwapChainSupport(struct Engine* engine, VkPhysicalDevice* physicalDevice)
-{
-    struct SwapChainSupportDetails details;
-    details.formats = NULL;
-    details.presentModes = NULL;
-
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-        *physicalDevice,
-        engine->surface,
-        &(details.capabilities)
-    );
-
-    vkGetPhysicalDeviceSurfaceFormatsKHR(
-        *physicalDevice,
-        engine->surface,
-        &(details.formatCount),
-        NULL
-    );
-
-    if (details.formatCount != 0)
-    {
-        details.formats = calloc(
-            details.formatCount,
-            sizeof(*(details.formats))
-        );
-        vkGetPhysicalDeviceSurfaceFormatsKHR(
-            *physicalDevice,
-            engine->surface,
-            &(details.formatCount),
-            details.formats
-        );
-    }
-
-    vkGetPhysicalDeviceSurfacePresentModesKHR(
-        *physicalDevice,
-        engine->surface,
-        &(details.presentModeCount),
-        NULL
-    );
-    if (details.presentModeCount != 0)
-    {
-        details.presentModes = calloc(
-            details.presentModeCount,
-            sizeof(*(details.presentModes))
-        );
-        vkGetPhysicalDeviceSurfacePresentModesKHR(
-            *physicalDevice,
-            engine->surface,
-            &(details.presentModeCount),
-            details.presentModes
-        );
-    }
-
-    return details;
-}
-
-void freeSwapChainSupportDetails(struct SwapChainSupportDetails* details)
-{
-    if (details->formats) {
-        free(details->formats);
-    }
-    if (details->presentModes) {
-        free(details->presentModes);
-    }
 }
 
 VkDevice renderer_get_device(
