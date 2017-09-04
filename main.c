@@ -183,7 +183,6 @@ VkSurfaceKHR renderer_get_surface(
 	GLFWwindow* window
 );
 VkPhysicalDevice renderer_get_physical_device(
-	struct Engine* engine,
 	VkInstance instance,
 	VkSurfaceKHR surface,
 	uint32_t device_extension_count,
@@ -239,7 +238,11 @@ uint32_t renderer_get_swapchain_image_count(
 	VkSwapchainKHR swapchain
 );
 void createImageViews(struct Engine* engine);
-void createRenderPass(struct Engine* engine);
+VkRenderPass renderer_get_render_pass(
+	VkDevice device,
+	VkFormat image_format
+	//VkFormat depth_format
+);
 char* readFile(const char* fname, uint32_t* fsize);
 void createGraphicsPipeline(struct Engine* engine);
 void createShaderModule(
@@ -296,7 +299,6 @@ int main() {
     );
 
     engine->physicalDevice = renderer_get_physical_device(
-		engine,
         engine->instance,
         engine->surface,
         engine->deviceExtensionCount,
@@ -375,7 +377,11 @@ int main() {
         engine->imageCount
     );
 
-    createRenderPass(engine);
+	engine->renderPass = renderer_get_render_pass(
+		engine->device,
+		engine->swapChainImageFormat.format
+	);
+
     createGraphicsPipeline(engine);
     createFrameBuffers(engine);
     createCommandBuffers(engine);
@@ -615,7 +621,6 @@ VkSurfaceKHR renderer_get_surface(
 }
 
 VkPhysicalDevice renderer_get_physical_device(
-		struct Engine* engine,
         VkInstance instance,
         VkSurfaceKHR surface,
         uint32_t device_extension_count,
@@ -1273,71 +1278,95 @@ void renderer_create_swapchain_buffers(
     }
 }
 
-void createRenderPass(struct Engine* engine)
+VkRenderPass renderer_get_render_pass(
+        VkDevice device,
+        VkFormat image_format)
+        //VkFormat depth_format)
 {
-    VkAttachmentDescription colorAttachment;
-    colorAttachment.flags = 0;
-    colorAttachment.format = engine->swapChainImageFormat.format;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkRenderPass render_pass_handle;
+    render_pass_handle = VK_NULL_HANDLE;
 
-    VkAttachmentReference colorAttachmentRef;
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentDescription color_desc = {
+        .flags = 0,
+        .format = image_format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+    VkAttachmentReference color_ref = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
 
-    VkSubpassDescription subpass;
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.flags = 0;
-    subpass.inputAttachmentCount = 0;
-    subpass.pInputAttachments = NULL;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pResolveAttachments = NULL;
-    subpass.pDepthStencilAttachment = NULL;
-    subpass.preserveAttachmentCount = 0;
-    subpass.pPreserveAttachments = NULL;
+    /*VkAttachmentDescription depth_desc = {
+        .flags = 0,
+        .format = depth_format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference depth_ref = {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };*/
 
-    VkSubpassDependency dependency;
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependency.dependencyFlags = 0;
+    VkAttachmentDescription attachments[] = {color_desc/*, depth_desc*/};
 
-    VkRenderPassCreateInfo renderPassCreateInfo;
-    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassCreateInfo.pNext = NULL;
-    renderPassCreateInfo.flags = 0;
-    renderPassCreateInfo.attachmentCount = 1;
-    renderPassCreateInfo.pAttachments = &colorAttachment;
-    renderPassCreateInfo.subpassCount = 1;
-    renderPassCreateInfo.pSubpasses = &subpass;
-    renderPassCreateInfo.dependencyCount = 1;
-    renderPassCreateInfo.pDependencies = &dependency;
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .flags = 0,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_ref,
+        .pResolveAttachments = NULL,
+        .pDepthStencilAttachment = NULL, //&depth_ref,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = NULL
+    };
+
+    VkSubpassDependency subpass_dependency = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0
+    };
+
+    VkRenderPassCreateInfo render_pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .attachmentCount = 1, //2,
+        .pAttachments = attachments,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &subpass_dependency
+    };
 
     VkResult result;
     result = vkCreateRenderPass(
-        engine->device,
-        &renderPassCreateInfo,
+        device,
+        &render_pass_info,
         NULL,
-        &(engine->renderPass)
+        &render_pass_handle
     );
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create render pass.\n");
-        exit(-1);
-    }
+    assert(result == VK_SUCCESS);
+
+    return render_pass_handle;
 }
 
 void createGraphicsPipeline(struct Engine* engine)
