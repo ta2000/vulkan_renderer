@@ -20,6 +20,13 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+struct swapchain_buffer
+{
+    VkImage image;
+    VkImageView image_view;
+    VkCommandBuffer cmd;
+};
+
 struct QueueFamilyIndices
 {
     int graphicsFamily;
@@ -58,8 +65,7 @@ struct Engine
     // Swapchain/images
     VkSwapchainKHR swapChain;
     uint32_t imageCount;
-    VkImage* swapChainImages;
-    VkImageView* imageViews;
+    struct swapchain_buffer* swapchain_buffers;
     VkFormat swapChainImageFormat;
     VkExtent2D swapChainExtent;
 
@@ -73,9 +79,8 @@ struct Engine
     // Frame buffers
     VkFramebuffer* framebuffers;
 
-    // Command pool/buffers
+    // Command pool
     VkCommandPool commandPool;
-    VkCommandBuffer* commandBuffers;
 
     // Semaphores
     VkSemaphore imageAvailable;
@@ -86,19 +91,6 @@ void drawFrame(struct Engine* engine);
 
 void EngineInit(struct Engine* self, GLFWwindow* window)
 {
-    self->physicalDevice = VK_NULL_HANDLE;
-    self->device = VK_NULL_HANDLE;
-
-    self->surfaceExtensionCount = 0;
-    self->deviceExtensionCount = 0;
-
-    self->framebuffers = NULL;
-    self->commandBuffers = NULL;
-
-    self->swapChainImages = NULL;
-    self->imageViews = NULL;
-    self->imageCount = 0;
-
     self->window = window;
 }
 void EngineRun(struct Engine* self)
@@ -118,12 +110,6 @@ void EngineDestroy(struct Engine* self)
     vkDestroySemaphore(self->device, self->imageAvailable, NULL);
     vkDestroySemaphore(self->device, self->renderFinished, NULL);
 
-    vkFreeCommandBuffers(
-        self->device,
-        self->commandPool,
-        self->imageCount,
-        self->commandBuffers
-    );
 
     free(self->commandBuffers);
 
@@ -156,12 +142,15 @@ void EngineDestroy(struct Engine* self)
     // Destroy all imageviews
     // TODO: Destroy as many image views as there are created
     // in case application fails in the middle of createing imageviews
-    if (self->imageViews != NULL)
+    for (i=0; i<self->imageCount; i++)
     {
-        for (i=0; i<self->imageCount; i++)
-        {
-            vkDestroyImageView(self->device, self->imageViews[i], NULL);
-        }
+        vkDestroyImageView(self->device, self->swapchain_buffers[i].image_view, NULL);
+        vkFreeCommandBuffers(
+            self->device,
+            self->commandPool,
+            self->imageCount,
+            self->swapchain_buffers[i].cmd
+        );
     }
 
     vkDestroySwapchainKHR(self->device, self->swapChain, NULL);
@@ -212,10 +201,6 @@ VkSurfaceFormatKHR renderer_get_image_format(
 	VkPhysicalDevice physical_device,
 	VkSurfaceKHR surface
 );
-VkPresentModeKHR chooseSwapPresentMode(
-    VkPresentModeKHR* availablePresentModes,
-    int presentModeCount
-);
 VkExtent2D renderer_get_swapchain_extent(
     VkPhysicalDevice physical_device,
     VkSurfaceKHR surface,
@@ -243,6 +228,14 @@ VkSwapchainKHR renderer_get_swapchain(
 	VkSurfaceFormatKHR image_format,
 	VkExtent2D swapchain_extent,
 	VkSwapchainKHR old_swapchain
+);
+void renderer_create_swapchain_buffers(
+    VkDevice device,
+    VkCommandPool command_pool,
+    VkSwapchainKHR swapchain,
+    VkSurfaceFormatKHR swapchain_image_format,
+    struct swapchain_buffer* swapchain_buffers,
+    uint32_t swapchain_image_count
 );
 uint32_t renderer_get_swapchain_image_count(
 	VkDevice device,
@@ -289,7 +282,9 @@ int main() {
 
     struct Engine* engine = calloc(1, sizeof(*engine));
     EngineInit(engine, window);
+
     engine->instance = renderer_get_instance(engine);
+
     setupDebugCallback(engine);
     engine->surface = renderer_get_surface(
         engine->instance,
@@ -368,22 +363,23 @@ int main() {
         engine->swapChain
     );
 
-    engine->swapChainImages = malloc(
-        engine->imageCount * sizeof(*engine->swapChainImages)
-    );
-    vkGetSwapchainImagesKHR(
-        engine->device,
-        engine->swapChain,
-        &engine->imageCount,
-        engine->swapChainImages
-    );
-
     engine->commandPool = renderer_get_command_pool(
         engine->physicalDevice,
         engine->device
     );
 
-    createImageViews(engine);
+    engine->swapchain_buffers = malloc(
+        engine->imageCount * sizeof(*engine->swapchain_buffers)
+    );
+    renderer_create_swapchain_buffers(
+        engine->device,
+        engine->commandPool,
+        engine->swapChain,
+        engine->swapChainImageFormat.format,
+        engine->swapchain_buffers,
+        engine->imageCount
+    );
+
     createRenderPass(engine);
     createGraphicsPipeline(engine);
     createFrameBuffers(engine);
@@ -1173,18 +1169,6 @@ VkSurfaceFormatKHR renderer_get_image_format(
     return image_format;
 }
 
-VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, int presentModeCount)
-{
-    int i;
-    for (i=0; i<presentModeCount; i++)
-    {
-        if (availablePresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
-            return availablePresentModes[i];
-    }
-
-    return VK_PRESENT_MODE_FIFO_KHR;
-}
-
 VkExtent2D renderer_get_swapchain_extent(
         VkPhysicalDevice physical_device,
         VkSurfaceKHR surface,
@@ -1221,45 +1205,76 @@ VkExtent2D renderer_get_swapchain_extent(
     return extent;
 }
 
-void createImageViews(struct Engine* engine)
+void renderer_create_swapchain_buffers(
+        VkDevice device,
+        VkCommandPool command_pool,
+        VkSwapchainKHR swapchain,
+        VkSurfaceFormatKHR swapchain_image_format,
+        struct swapchain_buffer* swapchain_buffers,
+        uint32_t swapchain_image_count)
 {
-    engine->imageViews = calloc(
-        engine->imageCount,
-        sizeof(*(engine->imageViews))
+    VkImage* images;
+    images = malloc(swapchain_image_count * sizeof(*images));
+    assert(images);
+
+    VkResult result;
+    result = vkGetSwapchainImagesKHR(
+        device,
+        swapchain,
+        &swapchain_image_count,
+        images
     );
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+
+    VkImageViewCreateInfo view_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .format = swapchain_image_format.format,
+        .components = {
+             .r = VK_COMPONENT_SWIZZLE_R,
+             .g = VK_COMPONENT_SWIZZLE_G,
+             .b = VK_COMPONENT_SWIZZLE_B,
+             .a = VK_COMPONENT_SWIZZLE_A
+        },
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .viewType = VK_IMAGE_VIEW_TYPE_2D
+    };
 
     uint32_t i;
-    for (i=0; i<engine->imageCount; i++)
+    for (i=0; i<swapchain_image_count; i++)
     {
-        VkImageViewCreateInfo createInfo;
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.pNext = NULL;
-        createInfo.flags = 0;
-        createInfo.image = engine->swapChainImages[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = engine->swapChainImageFormat;
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        VkResult result;
-        result = vkCreateImageView(
-            engine->device,
-            &createInfo,
-            NULL,
-            &(engine->imageViews[i])
+        result = vkAllocateCommandBuffers(
+            device,
+            &cmd_alloc_info,
+            &swapchain_buffers[i].cmd
         );
-        if (result != VK_SUCCESS)
-        {
-            fprintf(stderr, "Failed to create image view %d.\n", i);
-            exit(-1);
-        }
+        assert(result == VK_SUCCESS);
+
+        swapchain_buffers[i].image = images[i];
+        view_info.image = swapchain_buffers[i].image;
+
+        result = vkCreateImageView(
+            device,
+            &view_info,
+            NULL,
+            &swapchain_buffers[i].image_view
+        );
+        assert(result == VK_SUCCESS);
     }
 }
 
@@ -1595,7 +1610,7 @@ void createFrameBuffers(struct Engine* engine)
     uint32_t i;
     for (i=0; i<engine->imageCount; i++)
     {
-        VkImageView attachments[] = { engine->imageViews[i] };
+        VkImageView attachments[] = {engine->swapchain_buffers[i].image_view};
 
         VkFramebufferCreateInfo createInfo;
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1656,28 +1671,6 @@ VkCommandPool renderer_get_command_pool(
 
 void createCommandBuffers(struct Engine* engine)
 {
-    engine->commandBuffers = malloc(
-            engine->imageCount * sizeof(*(engine->commandBuffers)));
-
-    VkCommandBufferAllocateInfo allocInfo;
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.pNext = NULL;
-    allocInfo.commandPool = engine->commandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = engine->imageCount;
-
-    VkResult result;
-    result = vkAllocateCommandBuffers(
-        engine->device,
-        &allocInfo,
-        engine->commandBuffers
-    );
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create command buffers.\n");
-        exit(-1);
-    }
-
     uint32_t i;
     for (i=0; i<engine->imageCount; i++)
     {
@@ -1687,7 +1680,7 @@ void createCommandBuffers(struct Engine* engine)
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
         beginInfo.pInheritanceInfo = NULL;
 
-        vkBeginCommandBuffer(engine->commandBuffers[i], &beginInfo);
+        vkBeginCommandBuffer(engine->swapchain_buffers[i].cmd, &beginInfo);
 
         VkRenderPassBeginInfo renderPassInfo;
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1706,23 +1699,23 @@ void createCommandBuffers(struct Engine* engine)
         renderPassInfo.pClearValues = &clearColor;
 
         vkCmdBeginRenderPass(
-            engine->commandBuffers[i],
+            engine->swapchain_buffers[i].cmd,
             &renderPassInfo,
             VK_SUBPASS_CONTENTS_INLINE
         );
 
         vkCmdBindPipeline(
-            engine->commandBuffers[i],
+            engine->swapchain_buffers[i].cmd,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             engine->graphicsPipeline
         );
 
-        vkCmdDraw(engine->commandBuffers[i], 3, 1, 0, 0);
+        vkCmdDraw(engine->swapchain_buffers[i].cmd, 3, 1, 0, 0);
 
-        vkCmdEndRenderPass(engine->commandBuffers[i]);
+        vkCmdEndRenderPass(engine->swapchain_buffers[i].cmd);
 
         VkResult result;
-        result = vkEndCommandBuffer(engine->commandBuffers[i]);
+        result = vkEndCommandBuffer(engine->swapchain_buffers[i].cmd);
         if (result != VK_SUCCESS)
         {
             fprintf(stderr, "Failed to record command buffers.\n");
@@ -1790,7 +1783,7 @@ void drawFrame(struct Engine* engine)
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &(engine->commandBuffers[imageIndex]);
+    submitInfo.pCommandBuffers = &(engine->swapchain_buffers[imageIndex].cmd);
 
     VkSemaphore signalSemaphores[] = { engine->renderFinished };
     submitInfo.signalSemaphoreCount = 1;
