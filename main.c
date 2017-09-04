@@ -66,7 +66,7 @@ struct Engine
     VkSwapchainKHR swapChain;
     uint32_t imageCount;
     struct swapchain_buffer* swapchain_buffers;
-    VkFormat swapChainImageFormat;
+    VkSurfaceFormatKHR swapChainImageFormat;
     VkExtent2D swapChainExtent;
 
     // Render pass
@@ -110,12 +110,6 @@ void EngineDestroy(struct Engine* self)
     vkDestroySemaphore(self->device, self->imageAvailable, NULL);
     vkDestroySemaphore(self->device, self->renderFinished, NULL);
 
-
-    free(self->commandBuffers);
-
-    // Destroy command pool
-    vkDestroyCommandPool(self->device, self->commandPool, NULL);
-
     // Destroy frame buffers, same number as swapchain images
     if (self->framebuffers != NULL)
     {
@@ -148,10 +142,13 @@ void EngineDestroy(struct Engine* self)
         vkFreeCommandBuffers(
             self->device,
             self->commandPool,
-            self->imageCount,
-            self->swapchain_buffers[i].cmd
+            1,
+            &self->swapchain_buffers[i].cmd
         );
     }
+
+    // Destroy command pool
+    vkDestroyCommandPool(self->device, self->commandPool, NULL);
 
     vkDestroySwapchainKHR(self->device, self->swapChain, NULL);
     vkDestroyDevice(self->device, NULL);
@@ -335,12 +332,10 @@ int main() {
         &(engine->presentQueue)
     );
 
-    VkSurfaceFormatKHR surfaceFormat;
-    surfaceFormat = renderer_get_image_format(
+    engine->swapChainImageFormat = renderer_get_image_format(
 		engine->physicalDevice,
 		engine->surface
     );
-    engine->swapChainImageFormat = surfaceFormat.format;
 
     engine->swapChainExtent = renderer_get_swapchain_extent(
         engine->physicalDevice,
@@ -353,7 +348,7 @@ int main() {
         engine->physicalDevice,
         engine->device,
         engine->surface,
-        surfaceFormat,
+        engine->swapChainImageFormat,
         engine->swapChainExtent,
         VK_NULL_HANDLE
     );
@@ -375,7 +370,7 @@ int main() {
         engine->device,
         engine->commandPool,
         engine->swapChain,
-        engine->swapChainImageFormat.format,
+        engine->swapChainImageFormat,
         engine->swapchain_buffers,
         engine->imageCount
     );
@@ -1282,7 +1277,7 @@ void createRenderPass(struct Engine* engine)
 {
     VkAttachmentDescription colorAttachment;
     colorAttachment.flags = 0;
-    colorAttachment.format = engine->swapChainImageFormat;
+    colorAttachment.format = engine->swapChainImageFormat.format;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
