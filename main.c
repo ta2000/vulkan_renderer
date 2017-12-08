@@ -245,6 +245,42 @@ VkRenderPass renderer_get_render_pass(
 );
 char* readFile(const char* fname, uint32_t* fsize);
 void createGraphicsPipeline(struct Engine* engine);
+
+size_t renderer_get_file_size(
+    const char* fname
+);
+
+void renderer_read_file_to_buffer(
+    const char* fname,
+    char** buffer,
+    size_t buffer_size
+);
+
+VkShaderModule renderer_get_shader_module(
+    VkDevice device,
+    char* code,
+    size_t code_size
+);
+
+VkPipelineLayout renderer_get_pipeline_layout(
+    VkDevice device,
+    VkDescriptorSetLayout* descriptor_layouts,
+    uint32_t descriptor_layout_count,
+    VkPushConstantRange* push_constant_ranges,
+    uint32_t push_constant_range_count
+);
+
+VkPipeline renderer_get_graphics_pipeline(
+    VkDevice device,
+    VkShaderModule* shader_modules,
+    VkShaderStageFlagBits* shader_stage_flags,
+    uint32_t shader_stage_count,
+    VkExtent2D swapchain_extent,
+    VkPipelineLayout pipeline_layout,
+    VkRenderPass render_pass,
+    uint32_t subpass
+);
+
 void createShaderModule(
     struct Engine* engine,
     char* code,
@@ -355,19 +391,20 @@ int main() {
         VK_NULL_HANDLE
     );
 
-    engine->imageCount = renderer_get_swapchain_image_count(
-        engine->device,
-        engine->swapChain
-    );
-
     engine->commandPool = renderer_get_command_pool(
         engine->physicalDevice,
         engine->device
     );
 
+    engine->imageCount = renderer_get_swapchain_image_count(
+        engine->device,
+        engine->swapChain
+    );
+
     engine->swapchain_buffers = malloc(
         engine->imageCount * sizeof(*engine->swapchain_buffers)
     );
+
     renderer_create_swapchain_buffers(
         engine->device,
         engine->commandPool,
@@ -382,7 +419,57 @@ int main() {
 		engine->swapChainImageFormat.format
 	);
 
+    /*engine->pipelineLayout = renderer_get_pipeline_layout(
+        engine->device,
+        NULL,
+        0,
+        NULL,
+        0
+    );
+
+    VkShaderModule vert_shader_module;
+    size_t vert_shader_size = renderer_get_file_size("shaders/vert.spv");
+    char* vert_shader_code = malloc(vert_shader_size);
+    vert_shader_module = renderer_get_shader_module(
+        engine->device,
+        vert_shader_code,
+        vert_shader_size
+    );
+
+    VkShaderModule frag_shader_module;
+    size_t frag_shader_size = renderer_get_file_size("shaders/frag.spv");
+    char* frag_shader_code = malloc(frag_shader_size);
+    frag_shader_module = renderer_get_shader_module(
+        engine->device,
+        frag_shader_code,
+        frag_shader_size
+    );
+
+    VkShaderModule shader_modules[] = {vert_shader_module, frag_shader_module};
+
+    VkShaderStageFlagBits shader_stages[] = {
+        VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    engine->graphicsPipeline = renderer_get_graphics_pipeline(
+        engine->device,
+        shader_modules,
+        shader_stages,
+        2,
+        engine->swapChainExtent,
+        engine->pipelineLayout,
+        engine->renderPass,
+        0
+    );
+
+    free(vert_shader_code);
+    free(frag_shader_code);
+    vkDestroyShaderModule(engine->device, vert_shader_module, NULL);
+    vkDestroyShaderModule(engine->device, frag_shader_module, NULL);*/
+
     createGraphicsPipeline(engine);
+
     createFrameBuffers(engine);
     createCommandBuffers(engine);
     createSemaphores(engine);
@@ -1082,6 +1169,25 @@ VkSwapchainKHR renderer_get_swapchain(
         NULL,
         &swapchain_handle
     );
+    switch (result) {
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            printf("Out of host memory!\n");
+            break;
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+            printf("Out of device memory!\n");
+            break;
+        case VK_ERROR_DEVICE_LOST:
+            printf("Device lost!\n");
+            break;
+        case VK_ERROR_SURFACE_LOST_KHR:
+            printf("Surface lost!\n");
+            break;
+        case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+            printf("Native window in use!\n");
+            break;
+        default:
+            break;
+    }
     assert(result == VK_SUCCESS);
 
     if (old_swapchain != VK_NULL_HANDLE)
@@ -1367,6 +1473,314 @@ VkRenderPass renderer_get_render_pass(
     assert(result == VK_SUCCESS);
 
     return render_pass_handle;
+}
+
+size_t renderer_get_file_size(
+        const char* fname)
+{
+    FILE* fp = fopen(fname, "r");
+    assert(fp);
+
+    size_t fsize;
+    fseek(fp, 0L, SEEK_END);
+    fsize = ftell(fp);
+    rewind(fp);
+
+    fclose(fp);
+
+    return fsize;
+}
+
+void renderer_read_file_to_buffer(
+        const char* fname,
+        char** buffer,
+        size_t buffer_size)
+{
+    FILE* fp = fopen(fname, "r");
+    assert(fp);
+
+    assert(buffer);
+
+    size_t bytes_read;
+    bytes_read = fread(*buffer, 1, buffer_size, fp);
+    assert(bytes_read == buffer_size);
+
+    fclose(fp);
+}
+
+VkPipelineLayout renderer_get_pipeline_layout(
+        VkDevice device,
+        VkDescriptorSetLayout* descriptor_layouts,
+        uint32_t descriptor_layout_count,
+        VkPushConstantRange* push_constant_ranges,
+        uint32_t push_constant_range_count)
+{
+    VkPipelineLayout pipeline_layout_handle;
+    pipeline_layout_handle = VK_NULL_HANDLE;
+
+    VkPipelineLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .setLayoutCount = descriptor_layout_count,
+        .pSetLayouts = descriptor_layouts,
+        .pushConstantRangeCount = push_constant_range_count,
+        .pPushConstantRanges = push_constant_ranges
+    };
+
+    VkResult result;
+    result = vkCreatePipelineLayout(
+        device,
+        &layout_info,
+        NULL,
+        &pipeline_layout_handle
+    );
+    assert(result == VK_SUCCESS);
+
+    return pipeline_layout_handle;
+}
+
+VkShaderModule renderer_get_shader_module(
+        VkDevice device,
+        char* code,
+        size_t code_size)
+{
+    VkShaderModule shader_module_handle;
+
+    VkShaderModuleCreateInfo shader_module_info = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .codeSize = code_size,
+        .pCode = (uint32_t*)code
+    };
+
+    VkResult result;
+    result = vkCreateShaderModule(
+        device,
+        &shader_module_info,
+        NULL,
+        &shader_module_handle
+    );
+    assert(result == VK_SUCCESS);
+
+    return shader_module_handle;
+}
+
+VkPipeline renderer_get_graphics_pipeline(
+        VkDevice device,
+        VkShaderModule* shader_modules,
+        VkShaderStageFlagBits* shader_stage_flags,
+        uint32_t shader_stage_count,
+        VkExtent2D swapchain_extent,
+        VkPipelineLayout pipeline_layout,
+        VkRenderPass render_pass,
+        uint32_t subpass)
+{
+    VkPipelineShaderStageCreateInfo* shader_infos;
+    shader_infos = malloc(shader_stage_count * sizeof(*shader_modules));
+    // TODO: free this
+
+    uint32_t i;
+    for (i=0; i<shader_stage_count; i++) {
+        shader_infos[i].sType =
+            VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shader_infos[i].pNext = NULL;
+        shader_infos[i].flags = 0;
+        shader_infos[i].stage = shader_stage_flags[i];
+        shader_infos[i].module = shader_modules[i];
+        shader_infos[i].pName = "main";
+        shader_infos[i].pSpecializationInfo = NULL;
+    }
+
+    /*VkVertexInputBindingDescription binding_description = {
+        .binding = 0,
+        .stride = sizeof(struct renderer_vertex),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    };
+
+    VkVertexInputAttributeDescription position_attribute_description = {
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(struct renderer_vertex, x)
+    };
+
+    VkVertexInputAttributeDescription texture_attribute_description = {
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = offsetof(struct renderer_vertex, u)
+    };
+
+    VkVertexInputAttributeDescription attribute_descriptions[] = {
+        position_attribute_description,
+        texture_attribute_description
+    };*/
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO/*,
+        .pNext = NULL,
+        .flags = 0,
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &binding_description,
+        .vertexAttributeDescriptionCount = 2,
+        .pVertexAttributeDescriptions = attribute_descriptions*/
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE
+    };
+
+	VkViewport viewport = {
+        .x = 0,
+        .y = 0,
+        .width = (float)swapchain_extent.width,
+        .height = (float)swapchain_extent.height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = swapchain_extent
+    };
+
+    VkPipelineViewportStateCreateInfo viewport_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .viewportCount = 1,
+        .pViewports = &viewport,
+        .scissorCount = 1,
+        .pScissors = &scissor
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterization_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .depthClampEnable = VK_FALSE,
+        .rasterizerDiscardEnable = VK_FALSE,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_BACK_BIT,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .depthBiasEnable = VK_FALSE,
+        .depthBiasConstantFactor = 0.0f,
+        .depthBiasClamp = 0.0f,
+        .depthBiasSlopeFactor = 0.0f,
+        .lineWidth = 1.0f
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisample_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        .sampleShadingEnable = VK_FALSE,
+        .minSampleShading = 0.0f,
+        .pSampleMask = NULL,
+        .alphaToCoverageEnable = VK_FALSE,
+        .alphaToOneEnable = VK_FALSE
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_LESS,
+        .depthBoundsTestEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE,
+        .front.failOp = 0,
+        .front.passOp = 0,
+        .front.depthFailOp = 0,
+        .front.compareOp = 0,
+        .front.compareMask = 0,
+        .front.writeMask = 0,
+        .front.reference = 0,
+        .back.failOp = 0,
+        .back.passOp = 0,
+        .back.depthFailOp = 0,
+        .back.compareOp = 0,
+        .back.compareMask = 0,
+        .back.writeMask = 0,
+        .back.reference = 0,
+        .minDepthBounds = 0.0f,
+        .maxDepthBounds = 1.0f
+    };
+
+    VkPipelineColorBlendAttachmentState color_blend_attachment = {
+        .blendEnable = VK_FALSE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = VK_BLEND_OP_ADD,
+        .colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT |
+            VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT |
+            VK_COLOR_COMPONENT_A_BIT
+    };
+
+    VkPipelineColorBlendStateCreateInfo color_blend_state = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .logicOpEnable = VK_FALSE,
+        .logicOp = 0,
+        .attachmentCount = 1,
+        .pAttachments = &color_blend_attachment,
+        .blendConstants[0] = 0.0f,
+        .blendConstants[1] = 0.0f,
+        .blendConstants[2] = 0.0f,
+        .blendConstants[3] = 0.0f
+    };
+
+    VkGraphicsPipelineCreateInfo graphics_pipeline_info = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .stageCount = shader_stage_count,
+        .pStages = shader_infos,
+        .pVertexInputState = &vertex_input_state,
+        .pInputAssemblyState = &input_assembly_state,
+        .pTessellationState = NULL,
+        .pViewportState = &viewport_state,
+        .pRasterizationState = &rasterization_state,
+        .pMultisampleState = &multisample_state,
+        .pDepthStencilState = &depth_stencil_state,
+        .pColorBlendState = &color_blend_state,
+        .pDynamicState = NULL,
+        .layout = pipeline_layout,
+        .renderPass = render_pass,
+        .subpass = subpass,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1
+    };
+
+    VkPipeline graphics_pipeline_handle;
+    graphics_pipeline_handle = VK_NULL_HANDLE;
+
+    VkResult result;
+    result = vkCreateGraphicsPipelines(
+        device,
+        VK_NULL_HANDLE,
+        1,
+        &graphics_pipeline_info,
+        NULL,
+        &graphics_pipeline_handle
+    );
+    assert(result == VK_SUCCESS);
+
+    return graphics_pipeline_handle;
 }
 
 void createGraphicsPipeline(struct Engine* engine)
