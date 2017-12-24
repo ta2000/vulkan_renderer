@@ -303,6 +303,9 @@ void renderer_record_draw_commands(
     //struct renderer_mesh* mesh)
 );
 void createSemaphores(struct Engine* engine);
+VkSemaphore renderer_get_semaphore(
+    VkDevice device
+);
 
 uint32_t min(uint32_t a, uint32_t b)
 {
@@ -499,7 +502,8 @@ int main() {
         engine->imageCount
     );
 
-    createSemaphores(engine);
+	engine->imageAvailable = renderer_get_semaphore(engine->device);
+	engine->renderFinished = renderer_get_semaphore(engine->device);
 
     EngineRun(engine);
 
@@ -1998,37 +2002,27 @@ void renderer_record_draw_commands(
     }
 }
 
-void createSemaphores(struct Engine* engine)
+VkSemaphore renderer_get_semaphore(
+        VkDevice device)
 {
-    VkSemaphoreCreateInfo createInfo;
-    createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    createInfo.pNext = NULL;
-    createInfo.flags = 0;
+    VkSemaphore semaphore_handle;
+
+    VkSemaphoreCreateInfo semaphore_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0
+    };
 
     VkResult result;
     result = vkCreateSemaphore(
-        engine->device,
-        &createInfo,
+        device,
+        &semaphore_info,
         NULL,
-        &(engine->imageAvailable)
+        &semaphore_handle
     );
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create semaphore.\n");
-        exit(-1);
-    }
+    assert(result == VK_SUCCESS);
 
-    result = vkCreateSemaphore(
-        engine->device,
-        &createInfo,
-        NULL,
-        &(engine->renderFinished)
-    );
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create semaphore.\n");
-        exit(-1);
-    }
+    return semaphore_handle;
 }
 
 void drawFrame(struct Engine* engine)
