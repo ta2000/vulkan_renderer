@@ -419,7 +419,7 @@ int main() {
 		engine->swapChainImageFormat.format
 	);
 
-    /*engine->pipelineLayout = renderer_get_pipeline_layout(
+    engine->pipelineLayout = renderer_get_pipeline_layout(
         engine->device,
         NULL,
         0,
@@ -430,6 +430,7 @@ int main() {
     VkShaderModule vert_shader_module;
     size_t vert_shader_size = renderer_get_file_size("shaders/vert.spv");
     char* vert_shader_code = malloc(vert_shader_size);
+    renderer_read_file_to_buffer("shaders/vert.spv", &vert_shader_code, vert_shader_size);
     vert_shader_module = renderer_get_shader_module(
         engine->device,
         vert_shader_code,
@@ -439,6 +440,7 @@ int main() {
     VkShaderModule frag_shader_module;
     size_t frag_shader_size = renderer_get_file_size("shaders/frag.spv");
     char* frag_shader_code = malloc(frag_shader_size);
+    renderer_read_file_to_buffer("shaders/frag.spv", &frag_shader_code, frag_shader_size);
     frag_shader_module = renderer_get_shader_module(
         engine->device,
         frag_shader_code,
@@ -466,9 +468,9 @@ int main() {
     free(vert_shader_code);
     free(frag_shader_code);
     vkDestroyShaderModule(engine->device, vert_shader_module, NULL);
-    vkDestroyShaderModule(engine->device, frag_shader_module, NULL);*/
+    vkDestroyShaderModule(engine->device, frag_shader_module, NULL);
 
-    createGraphicsPipeline(engine);
+    //createGraphicsPipeline(engine);
 
     createFrameBuffers(engine);
     createCommandBuffers(engine);
@@ -1578,8 +1580,7 @@ VkPipeline renderer_get_graphics_pipeline(
         uint32_t subpass)
 {
     VkPipelineShaderStageCreateInfo* shader_infos;
-    shader_infos = malloc(shader_stage_count * sizeof(*shader_modules));
-    // TODO: free this
+    shader_infos = malloc(shader_stage_count * sizeof(*shader_infos));
 
     uint32_t i;
     for (i=0; i<shader_stage_count; i++) {
@@ -1668,7 +1669,7 @@ VkPipeline renderer_get_graphics_pipeline(
         .rasterizerDiscardEnable = VK_FALSE,
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = VK_CULL_MODE_BACK_BIT,
-        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .frontFace = VK_FRONT_FACE_CLOCKWISE,
         .depthBiasEnable = VK_FALSE,
         .depthBiasConstantFactor = 0.0f,
         .depthBiasClamp = 0.0f,
@@ -1779,6 +1780,8 @@ VkPipeline renderer_get_graphics_pipeline(
         &graphics_pipeline_handle
     );
     assert(result == VK_SUCCESS);
+
+    free(shader_infos);
 
     return graphics_pipeline_handle;
 }
