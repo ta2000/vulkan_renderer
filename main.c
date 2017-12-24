@@ -243,8 +243,6 @@ VkRenderPass renderer_get_render_pass(
 	VkFormat image_format
 	//VkFormat depth_format
 );
-char* readFile(const char* fname, uint32_t* fsize);
-void createGraphicsPipeline(struct Engine* engine);
 
 size_t renderer_get_file_size(
     const char* fname
@@ -281,13 +279,15 @@ VkPipeline renderer_get_graphics_pipeline(
     uint32_t subpass
 );
 
-void createShaderModule(
-    struct Engine* engine,
-    char* code,
-    uint32_t codeSize,
-    VkShaderModule* shaderModule
+void renderer_create_framebuffers(
+	VkDevice device,
+	VkRenderPass render_pass,
+	VkExtent2D swapchain_extent,
+	struct swapchain_buffer* swapchain_buffers,
+	//VkImageView depth_image_view,
+	VkFramebuffer* framebuffers,
+	uint32_t swapchain_image_count
 );
-void createFrameBuffers(struct Engine* engine);
 VkCommandPool renderer_get_command_pool(
     VkPhysicalDevice physical_device,
     VkDevice device
@@ -470,9 +470,17 @@ int main() {
     vkDestroyShaderModule(engine->device, vert_shader_module, NULL);
     vkDestroyShaderModule(engine->device, frag_shader_module, NULL);
 
-    //createGraphicsPipeline(engine);
+    engine->framebuffers = malloc(
+        sizeof(*engine->framebuffers) * engine->imageCount);
+	renderer_create_framebuffers(
+		engine->device,
+        engine->renderPass,
+        engine->swapChainExtent,
+        engine->swapchain_buffers,
+        engine->framebuffers,
+        engine->imageCount
+    );
 
-    createFrameBuffers(engine);
     createCommandBuffers(engine);
     createSemaphores(engine);
 
@@ -1786,297 +1794,45 @@ VkPipeline renderer_get_graphics_pipeline(
     return graphics_pipeline_handle;
 }
 
-void createGraphicsPipeline(struct Engine* engine)
+void renderer_create_framebuffers(
+        VkDevice device,
+        VkRenderPass render_pass,
+        VkExtent2D swapchain_extent,
+        struct swapchain_buffer* swapchain_buffers,
+        //VkImageView depth_image_view,
+        VkFramebuffer* framebuffers,
+        uint32_t swapchain_image_count)
 {
-    char* vertShaderFname = "shaders/vert.spv";
-    char* fragShaderFname = "shaders/frag.spv";
-    char* vertShader = NULL; uint32_t vertShaderSize;
-    char* fragShader = NULL; uint32_t fragShaderSize;
+    VkImageView attachments[1];
+    //VkImageView attachments[2];
+    //attachments[1] = depth_image_view;
 
-    vertShader = readFile(vertShaderFname, &vertShaderSize);
-    if (!vertShader)
-    {
-        fprintf(stderr, "Reading file %s failed.\n", vertShaderFname);
-        exit(-1);
-    }
-
-    fragShader = readFile(fragShaderFname, &fragShaderSize);
-    if (!fragShader)
-    {
-        fprintf(stderr, "Reading file %s failed.\n", fragShaderFname);
-        free(vertShader);
-        exit(-1);
-    }
-
-    VkShaderModule vertShaderModule;
-    VkShaderModule fragShaderModule;
-    createShaderModule(engine, vertShader, vertShaderSize, &vertShaderModule);
-    createShaderModule(engine, fragShader, fragShaderSize, &fragShaderModule);
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-    VkGraphicsPipelineCreateInfo pipelineInfo;
-    VkPipelineShaderStageCreateInfo shaderStageInfos[2];
-    VkPipelineVertexInputStateCreateInfo vertInputInfo;
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
-    VkPipelineRasterizationStateCreateInfo rasterizationInfo;
-    VkPipelineColorBlendAttachmentState colorBlendAttachment;
-    VkPipelineColorBlendStateCreateInfo colorBlendInfo;
-    //VkPipelineDepthStencilStateCreateInfo depthStencilInfo;
-    VkPipelineViewportStateCreateInfo viewportInfo;
-    VkPipelineMultisampleStateCreateInfo multisampleInfo;
-    //VkDynamicState dynamicStates[2];
-    //VkPipelineDynamicStateCreateInfo dyanamicStateInfo;
-
-    /*memset(&dynamicStates, 0, sizeof(dynamicStates));
-    dynamicStates[0] = VK_DYNAMIC_STATE_VIEWPORT;
-    dynamicStates[1] = VK_DYNAMIC_STATE_LINE_WIDTH;
-    memset(&dynamicStateInfo, 0, sizeof(dynamicStateInfo));
-    dynamicStateInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicStateInfo.dynamicStateCount = 2;
-    dynamicStateInfo.pDynamicStates = dynamicStates;*/
-
-    memset(&pipelineInfo, 0, sizeof(pipelineInfo));
-    pipelineInfo.sType =
-        VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.layout = engine->pipelineLayout;
-    pipelineInfo.stageCount = 2;
-
-    memset(shaderStageInfos, 0, 2*sizeof(shaderStageInfos[0]));
-    shaderStageInfos[0].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageInfos[0].pNext = NULL;
-    shaderStageInfos[0].flags = 0;
-    shaderStageInfos[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    shaderStageInfos[0].module = vertShaderModule;
-    shaderStageInfos[0].pName = "main";
-    shaderStageInfos[0].pSpecializationInfo = NULL;
-    shaderStageInfos[1].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageInfos[1].pNext = NULL;
-    shaderStageInfos[1].flags = 0;
-    shaderStageInfos[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    shaderStageInfos[1].module = fragShaderModule;
-    shaderStageInfos[1].pName = "main";
-    shaderStageInfos[1].pSpecializationInfo = NULL;
-
-    memset(&vertInputInfo, 0, sizeof(vertInputInfo));
-    vertInputInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-    memset(&inputAssemblyInfo, 0, sizeof(inputAssemblyInfo));
-    inputAssemblyInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
-
-    memset(&rasterizationInfo, 0, sizeof(rasterizationInfo));
-    rasterizationInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rasterizationInfo.depthClampEnable = VK_FALSE;
-    rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
-    rasterizationInfo.depthBiasEnable = VK_FALSE;
-    rasterizationInfo.depthBiasConstantFactor = 0.0f;
-    rasterizationInfo.depthBiasClamp = 0.0f;
-    rasterizationInfo.depthBiasSlopeFactor = 0.0f;
-    rasterizationInfo.lineWidth = 1.0f;
-
-    VkViewport viewport;
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (float) engine->swapChainExtent.width;
-    viewport.height = (float) engine->swapChainExtent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor;
-    scissor.offset.x = 0;
-    scissor.offset.y = 0;
-    scissor.extent = engine->swapChainExtent;
-
-    memset(&viewportInfo, 0, sizeof(viewportInfo));
-    viewportInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportInfo.viewportCount = 1;
-    viewportInfo.pViewports = &viewport;
-    viewportInfo.scissorCount = 1;
-    viewportInfo.pScissors = &scissor;
-
-    memset(&multisampleInfo, 0, sizeof(multisampleInfo));
-    multisampleInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    multisampleInfo.sampleShadingEnable = VK_FALSE;
-    multisampleInfo.minSampleShading = 0.0f;
-    multisampleInfo.pSampleMask = NULL;
-    multisampleInfo.alphaToCoverageEnable = VK_FALSE;
-    multisampleInfo.alphaToOneEnable = VK_FALSE;
-
-    memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
-    pipelineLayoutInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pSetLayouts = NULL;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pPushConstantRanges = NULL;
-
-    memset(&colorBlendAttachment, 0, sizeof(colorBlendAttachment));
-    colorBlendAttachment.colorWriteMask =
-        VK_COLOR_COMPONENT_R_BIT |
-        VK_COLOR_COMPONENT_G_BIT |
-        VK_COLOR_COMPONENT_B_BIT |
-        VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
-    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-    memset(&colorBlendInfo, 0, sizeof(colorBlendInfo));
-    colorBlendInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlendInfo.logicOpEnable = VK_FALSE;
-    colorBlendInfo.logicOp = VK_LOGIC_OP_COPY;
-    colorBlendInfo.attachmentCount = 1;
-    colorBlendInfo.pAttachments = &colorBlendAttachment;
-    colorBlendInfo.blendConstants[0] = 0.0f;
-    colorBlendInfo.blendConstants[1] = 0.0f;
-    colorBlendInfo.blendConstants[2] = 0.0f;
-    colorBlendInfo.blendConstants[3] = 0.0f;
-
-    if (vkCreatePipelineLayout(
-            engine->device,
-            &pipelineLayoutInfo,
-            NULL,
-            &(engine->pipelineLayout)
-    ) != VK_SUCCESS )
-    {
-        fprintf(stderr, "Failed to create pipeline layout.\n");
-        exit(-1);
-    }
-
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStageInfos;
-    pipelineInfo.pVertexInputState = &vertInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-    pipelineInfo.pTessellationState = NULL;
-    pipelineInfo.pViewportState = &viewportInfo;
-    pipelineInfo.pRasterizationState = &rasterizationInfo;
-    pipelineInfo.pMultisampleState = &multisampleInfo;
-    pipelineInfo.pDepthStencilState = NULL;
-    pipelineInfo.pColorBlendState = &colorBlendInfo;
-    pipelineInfo.pDynamicState = NULL;
-    pipelineInfo.layout = engine->pipelineLayout;
-    pipelineInfo.renderPass = engine->renderPass;
-    pipelineInfo.subpass = 0;
-    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-    if (vkCreateGraphicsPipelines(
-            engine->device,
-            VK_NULL_HANDLE,
-            1,
-            &pipelineInfo,
-            NULL,
-            &(engine->graphicsPipeline)
-    ) != VK_SUCCESS)
-    {
-        fprintf(stderr, "Failed to create graphics pipeline.\n");
-        exit(-1);
-    }
-
-    // Free memory, shader modules no longer needed
-    free(vertShader);
-    free(fragShader);
-    vkDestroyShaderModule(engine->device, vertShaderModule, NULL);
-    vkDestroyShaderModule(engine->device, fragShaderModule, NULL);
-}
-
-char* readFile(const char* fname, uint32_t* fsize)
-{
-    FILE *fp = fopen(fname, "r");
-
-    if (!fp)
-    {
-        fprintf(stderr, "Failed to load file %s.\n", fname);
-        return NULL;
-    }
-
-    fseek(fp, 0L, SEEK_END);
-    uint32_t length = ftell(fp);
-    rewind(fp);
-
-    char* buffer = malloc(length);
-    fread(buffer, length, 1, fp);
-    *fsize = length;
-
-    fclose(fp);
-
-    return buffer;
-}
-
-void createShaderModule(struct Engine* engine, char* code, uint32_t codeSize, VkShaderModule* shaderModule)
-{
-    VkShaderModuleCreateInfo createInfo;
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.pNext = NULL;
-    createInfo.flags = 0;
-    createInfo.codeSize = codeSize;
-    createInfo.pCode = (uint32_t*)code;
-
-    VkResult result;
-    result = vkCreateShaderModule(
-        engine->device,
-        &createInfo,
-        NULL,
-        shaderModule
-    );
-
-    if (result != VK_SUCCESS)
-    {
-        fprintf(stderr, "Shader module creation failed.\n");
-        exit(-1);
-    }
-}
-
-void createFrameBuffers(struct Engine* engine)
-{
-    engine->framebuffers = malloc(
-            engine->imageCount * sizeof(*(engine->framebuffers)));
+    VkFramebufferCreateInfo framebuffer_info = {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .renderPass = render_pass,
+        //.attachmentCount = 2,
+        .attachmentCount = 1,
+        .pAttachments = attachments,
+        .width = swapchain_extent.width,
+        .height = swapchain_extent.height,
+        .layers = 1
+    };
 
     uint32_t i;
-    for (i=0; i<engine->imageCount; i++)
+    for (i=0; i<swapchain_image_count; i++)
     {
-        VkImageView attachments[] = {engine->swapchain_buffers[i].image_view};
-
-        VkFramebufferCreateInfo createInfo;
-        createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        createInfo.pNext = NULL;
-        createInfo.flags = 0;
-        createInfo.renderPass = engine->renderPass;
-        createInfo.attachmentCount = 1;
-        createInfo.pAttachments = attachments;
-        createInfo.width = engine->swapChainExtent.width;
-        createInfo.height = engine->swapChainExtent.height;
-        createInfo.layers = 1;
+        attachments[0] = swapchain_buffers[i].image_view;
 
         VkResult result;
         result = vkCreateFramebuffer(
-            engine->device,
-            &createInfo,
+            device,
+            &framebuffer_info,
             NULL,
-            &(engine->framebuffers[i])
+            &framebuffers[i]
         );
-
-        if (result != VK_SUCCESS)
-        {
-            fprintf(stderr, "Error during framebuffer creation.\n");
-            exit(-1);
-        }
+        assert(result == VK_SUCCESS);
     }
 }
 
