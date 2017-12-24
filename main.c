@@ -292,7 +292,16 @@ VkCommandPool renderer_get_command_pool(
     VkPhysicalDevice physical_device,
     VkDevice device
 );
-void createCommandBuffers(struct Engine* engine);
+void renderer_record_draw_commands(
+    VkPipeline pipeline,
+    //VkPipelineLayout pipeline_layout,
+    VkRenderPass render_pass,
+    VkExtent2D swapchain_extent,
+    VkFramebuffer* framebuffers,
+    struct swapchain_buffer* swapchain_buffers,
+    uint32_t swapchain_image_count
+    //struct renderer_mesh* mesh)
+);
 void createSemaphores(struct Engine* engine);
 
 uint32_t min(uint32_t a, uint32_t b)
@@ -481,7 +490,15 @@ int main() {
         engine->imageCount
     );
 
-    createCommandBuffers(engine);
+    renderer_record_draw_commands(
+        engine->graphicsPipeline,
+        engine->renderPass,
+        engine->swapChainExtent,
+        engine->framebuffers,
+        engine->swapchain_buffers,
+        engine->imageCount
+    );
+
     createSemaphores(engine);
 
     EngineRun(engine);
@@ -1866,58 +1883,118 @@ VkCommandPool renderer_get_command_pool(
     return command_pool_handle;
 }
 
-void createCommandBuffers(struct Engine* engine)
+void renderer_record_draw_commands(
+        VkPipeline pipeline,
+        //VkPipelineLayout pipeline_layout,
+        VkRenderPass render_pass,
+        VkExtent2D swapchain_extent,
+        VkFramebuffer* framebuffers,
+        struct swapchain_buffer* swapchain_buffers,
+        uint32_t swapchain_image_count)
+        //struct renderer_mesh* mesh)
 {
+    VkCommandBufferBeginInfo cmd_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+        .pInheritanceInfo = NULL
+    };
+
+    VkClearValue clear_value = {
+        .color.float32 = {0.0f, 0.0f, 0.0f, 1.0f}
+    };
+
+    VkRenderPassBeginInfo render_pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .pNext = NULL,
+        .renderPass = render_pass,
+        .renderArea.offset = {0,0},
+        .renderArea.extent = {swapchain_extent.width, swapchain_extent.height},
+        .clearValueCount = 2,
+        .pClearValues = &clear_value,
+    };
+
     uint32_t i;
-    for (i=0; i<engine->imageCount; i++)
-    {
-        VkCommandBufferBeginInfo beginInfo;
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.pNext = NULL;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-        beginInfo.pInheritanceInfo = NULL;
+    for (i=0; i<swapchain_image_count; i++) {
+        VkResult result;
+        result = vkBeginCommandBuffer(
+            swapchain_buffers[i].cmd,
+            &cmd_begin_info
+        );
+        assert(result == VK_SUCCESS);
 
-        vkBeginCommandBuffer(engine->swapchain_buffers[i].cmd, &beginInfo);
-
-        VkRenderPassBeginInfo renderPassInfo;
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.pNext = NULL;
-        renderPassInfo.renderPass = engine->renderPass;
-        renderPassInfo.framebuffer = engine->framebuffers[i];
-        renderPassInfo.renderArea.offset.x = 0;
-        renderPassInfo.renderArea.offset.y = 0;
-        renderPassInfo.renderArea.extent = engine->swapChainExtent;
-
-        VkClearValue clearColor = {
-            .color.float32 = {0.0f, 0.0f, 0.0f, 1.0f}
-        };
-
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
-
+        render_pass_info.framebuffer = framebuffers[i];
         vkCmdBeginRenderPass(
-            engine->swapchain_buffers[i].cmd,
-            &renderPassInfo,
+            swapchain_buffers[i].cmd,
+            &render_pass_info,
             VK_SUBPASS_CONTENTS_INLINE
         );
 
+        VkViewport viewport = {
+            .x = 0,
+            .y = 0,
+            .width = swapchain_extent.width,
+            .height = swapchain_extent.height,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f
+        };
+        vkCmdSetViewport(swapchain_buffers[i].cmd, 0, 1, &viewport);
+
+        VkRect2D scissor = {
+            .offset = {0,0},
+            .extent = {swapchain_extent.width, swapchain_extent.height}
+        };
+        vkCmdSetScissor(swapchain_buffers[i].cmd, 0, 1, &scissor);
+
         vkCmdBindPipeline(
-            engine->swapchain_buffers[i].cmd,
+            swapchain_buffers[i].cmd,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
-            engine->graphicsPipeline
+            pipeline
         );
 
-        vkCmdDraw(engine->swapchain_buffers[i].cmd, 3, 1, 0, 0);
+        /*VkDeviceSize offsets[] = {0};
 
-        vkCmdEndRenderPass(engine->swapchain_buffers[i].cmd);
+        vkCmdBindVertexBuffers(
+            swapchain_buffers[i].cmd,
+            0,
+            1,
+            &mesh->vbo.buffer,
+            offsets
+        );
 
-        VkResult result;
-        result = vkEndCommandBuffer(engine->swapchain_buffers[i].cmd);
-        if (result != VK_SUCCESS)
-        {
-            fprintf(stderr, "Failed to record command buffers.\n");
-            exit(-1);
-        }
+        vkCmdBindIndexBuffer(
+            swapchain_buffers[i].cmd,
+            mesh->ibo.buffer,
+            0,
+            VK_INDEX_TYPE_UINT32
+        );
+
+        vkCmdBindDescriptorSets(
+            swapchain_buffers[i].cmd,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipeline_layout,
+            0,
+            1,
+            &mesh->descriptor_set,
+            0,
+            NULL
+        );
+
+        vkCmdDrawIndexed(
+            swapchain_buffers[i].cmd,
+            mesh->index_count,
+            1,
+            0,
+            0,
+            0
+        );*/
+
+        vkCmdDraw(swapchain_buffers[i].cmd, 3, 1, 0, 0);
+
+        vkCmdEndRenderPass(swapchain_buffers[i].cmd);
+
+        result = vkEndCommandBuffer(swapchain_buffers[i].cmd);
+        assert(result == VK_SUCCESS);
     }
 }
 
