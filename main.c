@@ -20,6 +20,10 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+// TODO:
+// - Pool for queues?
+// -
+
 struct swapchain_buffer
 {
     VkImage image;
@@ -27,13 +31,7 @@ struct swapchain_buffer
     VkCommandBuffer cmd;
 };
 
-struct QueueFamilyIndices
-{
-    int graphicsFamily;
-    int presentFamily;
-};
-
-struct Engine
+struct renderer_resources
 {
     // Window
     GLFWwindow* window;
@@ -42,10 +40,10 @@ struct Engine
     VkInstance instance;
 
     // Validation layers
-    char* surfaceExtensions[64];
-    uint32_t surfaceExtensionCount;
-    char* deviceExtensions[64];
-    uint32_t deviceExtensionCount;
+    char* surface_extensions[64];
+    uint32_t surface_extension_count;
+    char* device_extensions[64];
+    uint32_t device_extension_count;
     VkDebugReportCallbackEXT debugCallback;
     PFN_vkCreateDebugReportCallbackEXT createDebugCallback;
     PFN_vkDestroyDebugReportCallbackEXT destroyDebugCallback;
@@ -54,46 +52,47 @@ struct Engine
     VkSurfaceKHR surface;
 
     // Queues
-    VkQueue graphicsQueue;
-    VkQueue presentQueue;
-    struct QueueFamilyIndices indices;
+    VkQueue graphics_queue;
+    VkQueue present_queue;
+    int graphics_family_index;
+    int present_family_index;
 
     // Physical/logical device
-    VkPhysicalDevice physicalDevice;
+    VkPhysicalDevice physical_device;
     VkDevice device;
 
     // Swapchain/images
-    VkSwapchainKHR swapChain;
+    VkSwapchainKHR swapchain;
     uint32_t imageCount;
     struct swapchain_buffer* swapchain_buffers;
-    VkSurfaceFormatKHR swapChainImageFormat;
-    VkExtent2D swapChainExtent;
+    VkSurfaceFormatKHR swapchain_image_format;
+    VkExtent2D swapchain_extent;
 
     // Render pass
-    VkRenderPass renderPass;
+    VkRenderPass render_pass;
 
     // Graphics pipeline
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
+    VkPipelineLayout pipeline_layout;
+    VkPipeline graphics_pipeline;
 
     // Frame buffers
     VkFramebuffer* framebuffers;
 
     // Command pool
-    VkCommandPool commandPool;
+    VkCommandPool command_pool;
 
     // Semaphores
     VkSemaphore imageAvailable;
     VkSemaphore renderFinished;
 };
 
-void drawFrame(struct Engine* engine);
+void drawFrame(struct renderer_resources* resources);
 
-void EngineInit(struct Engine* self, GLFWwindow* window)
+void EngineInit(struct renderer_resources* self, GLFWwindow* window)
 {
     self->window = window;
 }
-void EngineRun(struct Engine* self)
+void EngineRun(struct renderer_resources* self)
 {
     // GLFW main loop
     while(!glfwWindowShouldClose(self->window)) {
@@ -103,7 +102,7 @@ void EngineRun(struct Engine* self)
 
     vkDeviceWaitIdle(self->device);
 }
-void EngineDestroy(struct Engine* self)
+void EngineDestroy(struct renderer_resources* self)
 {
     uint32_t i;
 
@@ -120,18 +119,18 @@ void EngineDestroy(struct Engine* self)
     }
 
     // Free extensions
-    for (i=0; i<self->surfaceExtensionCount; i++)
+    for (i=0; i<self->surface_extension_count; i++)
     {
-        free(self->surfaceExtensions[i]);
+        free(self->surface_extensions[i]);
     }
-    for (i=0; i<self->deviceExtensionCount; i++)
+    for (i=0; i<self->device_extension_count; i++)
     {
-        free(self->deviceExtensions[i]);
+        free(self->device_extensions[i]);
     }
 
-    vkDestroyPipeline(self->device, self->graphicsPipeline, NULL);
-    vkDestroyPipelineLayout(self->device, self->pipelineLayout, NULL);
-    vkDestroyRenderPass(self->device, self->renderPass, NULL);
+    vkDestroyPipeline(self->device, self->graphics_pipeline, NULL);
+    vkDestroyPipelineLayout(self->device, self->pipeline_layout, NULL);
+    vkDestroyRenderPass(self->device, self->render_pass, NULL);
 
     // Destroy all imageviews
     // TODO: Destroy as many image views as there are created
@@ -141,16 +140,16 @@ void EngineDestroy(struct Engine* self)
         vkDestroyImageView(self->device, self->swapchain_buffers[i].image_view, NULL);
         vkFreeCommandBuffers(
             self->device,
-            self->commandPool,
+            self->command_pool,
             1,
             &self->swapchain_buffers[i].cmd
         );
     }
 
     // Destroy command pool
-    vkDestroyCommandPool(self->device, self->commandPool, NULL);
+    vkDestroyCommandPool(self->device, self->command_pool, NULL);
 
-    vkDestroySwapchainKHR(self->device, self->swapChain, NULL);
+    vkDestroySwapchainKHR(self->device, self->swapchain, NULL);
     vkDestroyDevice(self->device, NULL);
     vkDestroySurfaceKHR(self->instance, self->surface, NULL);
     self->destroyDebugCallback(
@@ -166,7 +165,7 @@ _Bool checkValidationSupport(
     uint32_t validationLayerCount,
     const char** validationLayers
 );
-void getRequiredExtensions(struct Engine* engine);
+void getRequiredExtensions(struct renderer_resources* resources);
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT objType,
@@ -177,7 +176,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const char* msg,
     void* userData
 );
-void setupDebugCallback(struct Engine* engine);
+void setupDebugCallback(struct renderer_resources* resources);
 VkSurfaceKHR renderer_get_surface(
 	VkInstance instance,
 	GLFWwindow* window
@@ -237,7 +236,7 @@ uint32_t renderer_get_swapchain_image_count(
 	VkDevice device,
 	VkSwapchainKHR swapchain
 );
-void createImageViews(struct Engine* engine);
+void createImageViews(struct renderer_resources* resources);
 VkRenderPass renderer_get_render_pass(
 	VkDevice device,
 	VkFormat image_format
@@ -302,7 +301,6 @@ void renderer_record_draw_commands(
     uint32_t swapchain_image_count
     //struct renderer_mesh* mesh)
 );
-void createSemaphores(struct Engine* engine);
 VkSemaphore renderer_get_semaphore(
     VkDevice device
 );
@@ -328,111 +326,111 @@ int main() {
         NULL
     );
 
-    struct Engine* engine = calloc(1, sizeof(*engine));
-    EngineInit(engine, window);
+    struct renderer_resources* resources = calloc(1, sizeof(*resources));
+    EngineInit(resources, window);
 
-    engine->instance = renderer_get_instance(engine);
+    resources->instance = renderer_get_instance();
 
-    setupDebugCallback(engine);
-    engine->surface = renderer_get_surface(
-        engine->instance,
+    setupDebugCallback(resources);
+    resources->surface = renderer_get_surface(
+        resources->instance,
         window
     );
 
-    engine->deviceExtensions[engine->deviceExtensionCount] =
+    resources->device_extensions[resources->device_extension_count] =
         calloc(1, strlen(VK_KHR_SWAPCHAIN_EXTENSION_NAME)+1);
     strcpy(
-        engine->deviceExtensions[engine->deviceExtensionCount++],
+        resources->device_extensions[resources->device_extension_count++],
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     );
 
-    engine->physicalDevice = renderer_get_physical_device(
-        engine->instance,
-        engine->surface,
-        engine->deviceExtensionCount,
-        (const char**)engine->deviceExtensions
+    resources->physical_device = renderer_get_physical_device(
+        resources->instance,
+        resources->surface,
+        resources->device_extension_count,
+        (const char**)resources->device_extensions
     );
 
-	engine->indices.graphicsFamily = renderer_get_graphics_queue(
-		engine->physicalDevice
+	resources->graphics_family_index = renderer_get_graphics_queue(
+		resources->physical_device
     );
-    engine->indices.presentFamily = renderer_get_present_queue(
-        engine->physicalDevice,
-        engine->surface
+    resources->present_family_index = renderer_get_present_queue(
+        resources->physical_device,
+        resources->surface
     );
 
-    engine->device = renderer_get_device(
-        engine->physicalDevice,
-        engine->surface,
+    resources->device = renderer_get_device(
+        resources->physical_device,
+        resources->surface,
         NULL,
-        engine->deviceExtensionCount,
-        (const char**)engine->deviceExtensions
+        resources->device_extension_count,
+        (const char**)resources->device_extensions
     );
 
     vkGetDeviceQueue(
-        engine->device,
-        engine->indices.graphicsFamily,
+        resources->device,
+        resources->graphics_family_index,
         0,
-        &(engine->graphicsQueue)
+        &(resources->graphics_queue)
     );
     vkGetDeviceQueue(
-        engine->device,
-        engine->indices.presentFamily,
+        resources->device,
+        resources->present_family_index,
         0,
-        &(engine->presentQueue)
+        &(resources->present_queue)
     );
 
-    engine->swapChainImageFormat = renderer_get_image_format(
-		engine->physicalDevice,
-		engine->surface
+    resources->swapchain_image_format = renderer_get_image_format(
+		resources->physical_device,
+		resources->surface
     );
 
-    engine->swapChainExtent = renderer_get_swapchain_extent(
-        engine->physicalDevice,
-        engine->surface,
+    resources->swapchain_extent = renderer_get_swapchain_extent(
+        resources->physical_device,
+        resources->surface,
         WIDTH,
         HEIGHT
     );
 
-    engine->swapChain = renderer_get_swapchain(
-        engine->physicalDevice,
-        engine->device,
-        engine->surface,
-        engine->swapChainImageFormat,
-        engine->swapChainExtent,
+    resources->swapchain = renderer_get_swapchain(
+        resources->physical_device,
+        resources->device,
+        resources->surface,
+        resources->swapchain_image_format,
+        resources->swapchain_extent,
         VK_NULL_HANDLE
     );
 
-    engine->commandPool = renderer_get_command_pool(
-        engine->physicalDevice,
-        engine->device
+    resources->command_pool = renderer_get_command_pool(
+        resources->physical_device,
+        resources->device
     );
 
-    engine->imageCount = renderer_get_swapchain_image_count(
-        engine->device,
-        engine->swapChain
+    resources->imageCount = renderer_get_swapchain_image_count(
+        resources->device,
+        resources->swapchain
     );
 
-    engine->swapchain_buffers = malloc(
-        engine->imageCount * sizeof(*engine->swapchain_buffers)
+    resources->swapchain_buffers = malloc(
+        resources->imageCount * sizeof(*resources->swapchain_buffers)
     );
 
     renderer_create_swapchain_buffers(
-        engine->device,
-        engine->commandPool,
-        engine->swapChain,
-        engine->swapChainImageFormat,
-        engine->swapchain_buffers,
-        engine->imageCount
+        resources->device,
+        resources->command_pool,
+        resources->swapchain,
+        resources->swapchain_image_format,
+        resources->swapchain_buffers,
+        resources->imageCount
     );
 
-	engine->renderPass = renderer_get_render_pass(
-		engine->device,
-		engine->swapChainImageFormat.format
+	resources->render_pass = renderer_get_render_pass(
+		resources->device,
+		resources->swapchain_image_format.format
 	);
 
-    engine->pipelineLayout = renderer_get_pipeline_layout(
-        engine->device,
+    resources->pipeline_layout = renderer_get_pipeline_layout(
+        resources->device,
         NULL,
         0,
         NULL,
@@ -444,7 +442,7 @@ int main() {
     char* vert_shader_code = malloc(vert_shader_size);
     renderer_read_file_to_buffer("shaders/vert.spv", &vert_shader_code, vert_shader_size);
     vert_shader_module = renderer_get_shader_module(
-        engine->device,
+        resources->device,
         vert_shader_code,
         vert_shader_size
     );
@@ -454,7 +452,7 @@ int main() {
     char* frag_shader_code = malloc(frag_shader_size);
     renderer_read_file_to_buffer("shaders/frag.spv", &frag_shader_code, frag_shader_size);
     frag_shader_module = renderer_get_shader_module(
-        engine->device,
+        resources->device,
         frag_shader_code,
         frag_shader_size
     );
@@ -466,50 +464,50 @@ int main() {
         VK_SHADER_STAGE_FRAGMENT_BIT
     };
 
-    engine->graphicsPipeline = renderer_get_graphics_pipeline(
-        engine->device,
+    resources->graphics_pipeline = renderer_get_graphics_pipeline(
+        resources->device,
         shader_modules,
         shader_stages,
         2,
-        engine->swapChainExtent,
-        engine->pipelineLayout,
-        engine->renderPass,
+        resources->swapchain_extent,
+        resources->pipeline_layout,
+        resources->render_pass,
         0
     );
 
     free(vert_shader_code);
     free(frag_shader_code);
-    vkDestroyShaderModule(engine->device, vert_shader_module, NULL);
-    vkDestroyShaderModule(engine->device, frag_shader_module, NULL);
+    vkDestroyShaderModule(resources->device, vert_shader_module, NULL);
+    vkDestroyShaderModule(resources->device, frag_shader_module, NULL);
 
-    engine->framebuffers = malloc(
-        sizeof(*engine->framebuffers) * engine->imageCount);
+    resources->framebuffers = malloc(
+        sizeof(*resources->framebuffers) * resources->imageCount);
 	renderer_create_framebuffers(
-		engine->device,
-        engine->renderPass,
-        engine->swapChainExtent,
-        engine->swapchain_buffers,
-        engine->framebuffers,
-        engine->imageCount
+		resources->device,
+        resources->render_pass,
+        resources->swapchain_extent,
+        resources->swapchain_buffers,
+        resources->framebuffers,
+        resources->imageCount
     );
 
     renderer_record_draw_commands(
-        engine->graphicsPipeline,
-        engine->renderPass,
-        engine->swapChainExtent,
-        engine->framebuffers,
-        engine->swapchain_buffers,
-        engine->imageCount
+        resources->graphics_pipeline,
+        resources->render_pass,
+        resources->swapchain_extent,
+        resources->framebuffers,
+        resources->swapchain_buffers,
+        resources->imageCount
     );
 
-	engine->imageAvailable = renderer_get_semaphore(engine->device);
-	engine->renderFinished = renderer_get_semaphore(engine->device);
+	resources->imageAvailable = renderer_get_semaphore(resources->device);
+	resources->renderFinished = renderer_get_semaphore(resources->device);
 
-    EngineRun(engine);
+    EngineRun(resources);
 
-    EngineDestroy(engine);
+    EngineDestroy(resources);
 
-    free(engine);
+    free(resources);
 
     // Close window
     glfwDestroyWindow(window);
@@ -671,7 +669,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-void setupDebugCallback(struct Engine* engine)
+void setupDebugCallback(struct renderer_resources* resources)
 {
     if (!VALIDATION_ENABLED) return;
 
@@ -684,33 +682,33 @@ void setupDebugCallback(struct Engine* engine)
     createInfo.pfnCallback = &debugCallback;
     createInfo.pUserData = NULL;
 
-    engine->createDebugCallback =
+    resources->createDebugCallback =
         (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
-            engine->instance,
+            resources->instance,
             "vkCreateDebugReportCallbackEXT"
         );
-    if (!engine->createDebugCallback)
+    if (!resources->createDebugCallback)
     {
         fprintf(stderr, "GetProcAddr vkCreateDebugReportCallback failed.\n");
         exit(-1);
     }
 
-    engine->destroyDebugCallback =
+    resources->destroyDebugCallback =
         (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
-            engine->instance,
+            resources->instance,
             "vkDestroyDebugReportCallbackEXT"
         );
-    if (!engine->destroyDebugCallback)
+    if (!resources->destroyDebugCallback)
     {
         fprintf(stderr, "GetProcAddr vkDestroyDebugReportCallback failed.\n");
         exit(-1);
     }
 
-    VkResult result = engine->createDebugCallback(
-        engine->instance,
+    VkResult result = resources->createDebugCallback(
+        resources->instance,
         &createInfo,
         NULL,
-        &(engine->debugCallback)
+        &(resources->debugCallback)
     );
 
     if (result != VK_SUCCESS)
@@ -1200,25 +1198,6 @@ VkSwapchainKHR renderer_get_swapchain(
         NULL,
         &swapchain_handle
     );
-    switch (result) {
-        case VK_ERROR_OUT_OF_HOST_MEMORY:
-            printf("Out of host memory!\n");
-            break;
-        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-            printf("Out of device memory!\n");
-            break;
-        case VK_ERROR_DEVICE_LOST:
-            printf("Device lost!\n");
-            break;
-        case VK_ERROR_SURFACE_LOST_KHR:
-            printf("Surface lost!\n");
-            break;
-        case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
-            printf("Native window in use!\n");
-            break;
-        default:
-            break;
-    }
     assert(result == VK_SUCCESS);
 
     if (old_swapchain != VK_NULL_HANDLE)
@@ -2025,14 +2004,14 @@ VkSemaphore renderer_get_semaphore(
     return semaphore_handle;
 }
 
-void drawFrame(struct Engine* engine)
+void drawFrame(struct renderer_resources* resources)
 {
     uint32_t imageIndex;
     vkAcquireNextImageKHR(
-        engine->device,
-        engine->swapChain,
+        resources->device,
+        resources->swapchain,
         UINT64_MAX, // Wait for next image indefinitely (ns)
-        engine->imageAvailable,
+        resources->imageAvailable,
         VK_NULL_HANDLE,
         &imageIndex
     );
@@ -2041,7 +2020,7 @@ void drawFrame(struct Engine* engine)
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pNext = NULL;
 
-    VkSemaphore waitSemaphores[] = { engine->imageAvailable };
+    VkSemaphore waitSemaphores[] = { resources->imageAvailable };
     VkPipelineStageFlags waitStages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
     };
@@ -2051,15 +2030,15 @@ void drawFrame(struct Engine* engine)
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &(engine->swapchain_buffers[imageIndex].cmd);
+    submitInfo.pCommandBuffers = &(resources->swapchain_buffers[imageIndex].cmd);
 
-    VkSemaphore signalSemaphores[] = { engine->renderFinished };
+    VkSemaphore signalSemaphores[] = { resources->renderFinished };
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     VkResult result;
     result = vkQueueSubmit(
-        engine->graphicsQueue,
+        resources->graphics_queue,
         1,
         &submitInfo,
         VK_NULL_HANDLE
@@ -2076,12 +2055,12 @@ void drawFrame(struct Engine* engine)
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
-    VkSwapchainKHR swapChains[] = { engine->swapChain };
+    VkSwapchainKHR swapchains[] = { resources->swapchain };
 
     presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
+    presentInfo.pSwapchains = swapchains;
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = NULL;
 
-    vkQueuePresentKHR(engine->presentQueue, &presentInfo);
+    vkQueuePresentKHR(resources->present_queue, &presentInfo);
 }
