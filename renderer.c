@@ -6,19 +6,6 @@
 #include <stdint.h>
 #include <assert.h>
 
-void drawFrame(struct renderer_resources* resources);
-
-void EngineRun(struct renderer_resources* self)
-{
-    // GLFW main loop
-    while(!glfwWindowShouldClose(self->window)) {
-        glfwPollEvents();
-        drawFrame(self);
-    }
-
-    vkDeviceWaitIdle(self->device);
-}
-
 void renderer_initialize_resources(
         struct renderer_resources* resources,
         GLFWwindow* window)
@@ -205,8 +192,6 @@ void renderer_initialize_resources(
 
 	resources->imageAvailable = renderer_get_semaphore(resources->device);
 	resources->renderFinished = renderer_get_semaphore(resources->device);
-
-    EngineRun(resources);
 }
 
 VkInstance renderer_get_instance()
@@ -1758,6 +1743,8 @@ void drawFrame(struct renderer_resources* resources)
     presentInfo.pResults = NULL;
 
     vkQueuePresentKHR(resources->present_queue, &presentInfo);
+
+    vkDeviceWaitIdle(resources->device);
 }
 
 void renderer_destroy_resources(

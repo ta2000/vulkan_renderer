@@ -18,6 +18,10 @@ int main()
 
     renderer_initialize_resources(renderer_resources, window);
 
+    while(!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        drawFrame(renderer_resources);
+    }
 
     glfwDestroyWindow(window);
     glfwTerminate();
