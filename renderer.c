@@ -15,7 +15,6 @@ void renderer_initialize_resources(
     resources->window = window;
     int window_width, window_height = 0;
     glfwGetWindowSize(window, &window_width, &window_height);
-    assert(window_width && window_height);
 
     resources->instance = renderer_get_instance();
 
