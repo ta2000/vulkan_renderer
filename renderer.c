@@ -75,6 +75,9 @@ void renderer_initialize_resources(
         GLFWwindow* window)
 {
     resources->window = window;
+    int window_width, window_height = 0;
+    glfwGetWindowSize(window, &window_width, &window_height);
+    assert(window_width && window_height);
 
     resources->instance = renderer_get_instance();
 
@@ -138,8 +141,8 @@ void renderer_initialize_resources(
     resources->swapchain_extent = renderer_get_swapchain_extent(
         resources->physical_device,
         resources->surface,
-        WIDTH,
-        HEIGHT
+        window_width,
+        window_height
     );
 
     resources->swapchain = renderer_get_swapchain(
