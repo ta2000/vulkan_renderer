@@ -193,9 +193,6 @@ VkShaderModule renderer_get_shader_module(
 
 VkPipeline renderer_get_graphics_pipeline(
     VkDevice device,
-    VkShaderModule* shader_modules,
-    VkShaderStageFlagBits* shader_stage_flags,
-    uint32_t shader_stage_count,
     VkExtent2D swapchain_extent,
     VkPipelineLayout pipeline_layout,
     VkRenderPass render_pass,
@@ -228,6 +225,10 @@ VkSemaphore renderer_get_semaphore(
 );
 
 void drawFrame(struct renderer_resources* resources);
+
+void renderer_resize(
+    struct renderer_resources* resources
+);
 
 void renderer_destroy_resources(
     struct renderer_resources* resources

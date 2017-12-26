@@ -126,48 +126,13 @@ void renderer_initialize_resources(
         0
     );
 
-    VkShaderModule vert_shader_module;
-    size_t vert_shader_size = renderer_get_file_size("shaders/vert.spv");
-    char* vert_shader_code = malloc(vert_shader_size);
-    renderer_read_file_to_buffer("shaders/vert.spv", &vert_shader_code, vert_shader_size);
-    vert_shader_module = renderer_get_shader_module(
-        resources->device,
-        vert_shader_code,
-        vert_shader_size
-    );
-
-    VkShaderModule frag_shader_module;
-    size_t frag_shader_size = renderer_get_file_size("shaders/frag.spv");
-    char* frag_shader_code = malloc(frag_shader_size);
-    renderer_read_file_to_buffer("shaders/frag.spv", &frag_shader_code, frag_shader_size);
-    frag_shader_module = renderer_get_shader_module(
-        resources->device,
-        frag_shader_code,
-        frag_shader_size
-    );
-
-    VkShaderModule shader_modules[] = {vert_shader_module, frag_shader_module};
-
-    VkShaderStageFlagBits shader_stages[] = {
-        VK_SHADER_STAGE_VERTEX_BIT,
-        VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
     resources->graphics_pipeline = renderer_get_graphics_pipeline(
         resources->device,
-        shader_modules,
-        shader_stages,
-        2,
         resources->swapchain_extent,
         resources->pipeline_layout,
         resources->render_pass,
         0
     );
-
-    free(vert_shader_code);
-    free(frag_shader_code);
-    vkDestroyShaderModule(resources->device, vert_shader_module, NULL);
-    vkDestroyShaderModule(resources->device, frag_shader_module, NULL);
 
     resources->framebuffers = malloc(
         sizeof(*resources->framebuffers) * resources->imageCount);
@@ -1288,14 +1253,52 @@ VkShaderModule renderer_get_shader_module(
 
 VkPipeline renderer_get_graphics_pipeline(
         VkDevice device,
-        VkShaderModule* shader_modules,
-        VkShaderStageFlagBits* shader_stage_flags,
-        uint32_t shader_stage_count,
         VkExtent2D swapchain_extent,
         VkPipelineLayout pipeline_layout,
         VkRenderPass render_pass,
         uint32_t subpass)
 {
+    VkShaderModule vert_shader_module;
+    size_t vert_shader_size = renderer_get_file_size("shaders/vert.spv");
+    char* vert_shader_code = malloc(vert_shader_size);
+    renderer_read_file_to_buffer(
+        "shaders/vert.spv",
+        &vert_shader_code,
+        vert_shader_size
+    );
+    vert_shader_module = renderer_get_shader_module(
+        device,
+        vert_shader_code,
+        vert_shader_size
+    );
+    free(vert_shader_code);
+
+    VkShaderModule frag_shader_module;
+    size_t frag_shader_size = renderer_get_file_size("shaders/frag.spv");
+    char* frag_shader_code = malloc(frag_shader_size);
+    renderer_read_file_to_buffer(
+        "shaders/frag.spv",
+        &frag_shader_code,
+        frag_shader_size
+    );
+    frag_shader_module = renderer_get_shader_module(
+        device,
+        frag_shader_code,
+        frag_shader_size
+    );
+    free(frag_shader_code);
+
+    VkShaderModule shader_modules[] = {
+        vert_shader_module,
+        frag_shader_module
+    };
+    VkShaderStageFlagBits shader_stage_flags[] = {
+        VK_SHADER_STAGE_VERTEX_BIT,
+        VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+    uint32_t shader_stage_count = 2;
+
+
     VkPipelineShaderStageCreateInfo* shader_infos;
     shader_infos = malloc(shader_stage_count * sizeof(*shader_infos));
 
@@ -1499,6 +1502,9 @@ VkPipeline renderer_get_graphics_pipeline(
     assert(result == VK_SUCCESS);
 
     free(shader_infos);
+
+    vkDestroyShaderModule(device, vert_shader_module, NULL);
+    vkDestroyShaderModule(device, frag_shader_module, NULL);
 
     return graphics_pipeline_handle;
 }
@@ -1744,6 +1750,27 @@ void drawFrame(struct renderer_resources* resources)
     vkQueuePresentKHR(resources->present_queue, &presentInfo);
 
     vkDeviceWaitIdle(resources->device);
+}
+
+void renderer_resize(
+        struct renderer_resources* resources)
+{
+    resources->swapchain = renderer_get_swapchain(
+        resources->physical_device,
+        resources->device,
+        resources->surface,
+        resources->swapchain_image_format,
+        resources->swapchain_extent,
+        resources->swapchain
+    );
+
+    vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
+	resources->render_pass = renderer_get_render_pass(
+		resources->device,
+		resources->swapchain_image_format.format
+	);
+
+    vkDestroyPipeline(resources->device, resources->graphics_pipeline, NULL);
 }
 
 void renderer_destroy_resources(
