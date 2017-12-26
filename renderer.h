@@ -6,8 +6,6 @@
 
 #include <stdbool.h>
 
-#define WIDTH 800
-#define HEIGHT 600
 #define VALIDATION_ENABLED 1
 
 #define APP_NAME "Game"
@@ -72,7 +70,10 @@ struct renderer_resources
     VkSemaphore renderFinished;
 };
 
-void renderer_init();
+void renderer_initialize_resources(
+    struct renderer_resources* resources,
+    GLFWwindow* window
+);
 
 VkInstance renderer_get_instance();
 
@@ -90,29 +91,17 @@ VkSurfaceKHR renderer_get_surface(
 	GLFWwindow* window
 );
 
-VkPhysicalDevice renderer_get_physical_device(
-	VkInstance instance,
-	VkSurfaceKHR surface,
-	uint32_t device_extension_count,
-	const char** device_extensions
-);
-
 bool physical_device_extensions_supported(
     VkPhysicalDevice physical_device,
     uint32_t required_extension_count,
     const char** required_extensions
 );
 
-VkSurfaceFormatKHR renderer_get_image_format(
-	VkPhysicalDevice physical_device,
-	VkSurfaceKHR surface
-);
-
-VkExtent2D renderer_get_swapchain_extent(
-    VkPhysicalDevice physical_device,
-    VkSurfaceKHR surface,
-    uint32_t window_width,
-    uint32_t window_height
+VkPhysicalDevice renderer_get_physical_device(
+	VkInstance instance,
+	VkSurfaceKHR surface,
+	uint32_t device_extension_count,
+	const char** device_extensions
 );
 
 VkDevice renderer_get_device(
@@ -132,6 +121,18 @@ uint32_t renderer_get_present_queue_family(
 	VkSurfaceKHR surface
 );
 
+VkSurfaceFormatKHR renderer_get_swapchain_image_format(
+	VkPhysicalDevice physical_device,
+	VkSurfaceKHR surface
+);
+
+VkExtent2D renderer_get_swapchain_extent(
+    VkPhysicalDevice physical_device,
+    VkSurfaceKHR surface,
+    uint32_t window_width,
+    uint32_t window_height
+);
+
 VkSwapchainKHR renderer_get_swapchain(
 	VkPhysicalDevice physical_device,
 	VkDevice device,
@@ -139,6 +140,16 @@ VkSwapchainKHR renderer_get_swapchain(
 	VkSurfaceFormatKHR image_format,
 	VkExtent2D swapchain_extent,
 	VkSwapchainKHR old_swapchain
+);
+
+uint32_t renderer_get_swapchain_image_count(
+	VkDevice device,
+	VkSwapchainKHR swapchain
+);
+
+VkCommandPool renderer_get_command_pool(
+    VkPhysicalDevice physical_device,
+    VkDevice device
 );
 
 void renderer_create_swapchain_buffers(
@@ -150,16 +161,18 @@ void renderer_create_swapchain_buffers(
     uint32_t swapchain_image_count
 );
 
-uint32_t renderer_get_swapchain_image_count(
-	VkDevice device,
-	VkSwapchainKHR swapchain
-);
-
-void createImageViews(struct renderer_resources* resources);
 VkRenderPass renderer_get_render_pass(
 	VkDevice device,
 	VkFormat image_format
 	//VkFormat depth_format
+);
+
+VkPipelineLayout renderer_get_pipeline_layout(
+    VkDevice device,
+    VkDescriptorSetLayout* descriptor_layouts,
+    uint32_t descriptor_layout_count,
+    VkPushConstantRange* push_constant_ranges,
+    uint32_t push_constant_range_count
 );
 
 size_t renderer_get_file_size(
@@ -176,14 +189,6 @@ VkShaderModule renderer_get_shader_module(
     VkDevice device,
     char* code,
     size_t code_size
-);
-
-VkPipelineLayout renderer_get_pipeline_layout(
-    VkDevice device,
-    VkDescriptorSetLayout* descriptor_layouts,
-    uint32_t descriptor_layout_count,
-    VkPushConstantRange* push_constant_ranges,
-    uint32_t push_constant_range_count
 );
 
 VkPipeline renderer_get_graphics_pipeline(
@@ -205,11 +210,6 @@ void renderer_create_framebuffers(
 	//VkImageView depth_image_view,
 	VkFramebuffer* framebuffers,
 	uint32_t swapchain_image_count
-);
-
-VkCommandPool renderer_get_command_pool(
-    VkPhysicalDevice physical_device,
-    VkDevice device
 );
 
 void renderer_record_draw_commands(
