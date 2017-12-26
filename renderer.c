@@ -18,62 +18,13 @@ void EngineRun(struct renderer_resources* self)
 
     vkDeviceWaitIdle(self->device);
 }
-void EngineDestroy(struct renderer_resources* resources)
-{
-    uint32_t i;
-    vkDestroySemaphore(resources->device, resources->imageAvailable, NULL);
-    vkDestroySemaphore(resources->device, resources->renderFinished, NULL);
-
-    if (resources->framebuffers != NULL)
-    {
-        for (i=0; i<resources->imageCount; i++)
-        {
-            vkDestroyFramebuffer(resources->device, resources->framebuffers[i], NULL);
-        }
-    }
-
-    for (i=0; i<resources->surface_extension_count; i++)
-    {
-        free(resources->surface_extensions[i]);
-    }
-    for (i=0; i<resources->device_extension_count; i++)
-    {
-        free(resources->device_extensions[i]);
-    }
-
-    vkDestroyPipeline(resources->device, resources->graphics_pipeline, NULL);
-    vkDestroyPipelineLayout(resources->device, resources->pipeline_layout, NULL);
-    vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
-
-    for (i=0; i<resources->imageCount; i++)
-    {
-        vkDestroyImageView(resources->device, resources->swapchain_buffers[i].image_view, NULL);
-        vkFreeCommandBuffers(
-            resources->device,
-            resources->command_pool,
-            1,
-            &resources->swapchain_buffers[i].cmd
-        );
-    }
-
-    vkDestroyCommandPool(resources->device, resources->command_pool, NULL);
-
-    vkDestroySwapchainKHR(resources->device, resources->swapchain, NULL);
-    vkDestroyDevice(resources->device, NULL);
-    vkDestroySurfaceKHR(resources->instance, resources->surface, NULL);
-
-    renderer_destroy_debug_callback_ext(
-        resources->instance,
-        resources->debug_callback_ext
-    );
-
-    vkDestroyInstance(resources->instance, NULL);
-}
 
 void renderer_initialize_resources(
         struct renderer_resources* resources,
         GLFWwindow* window)
 {
+    memset(resources, 0, sizeof(*resources));
+
     resources->window = window;
     int window_width, window_height = 0;
     glfwGetWindowSize(window, &window_width, &window_height);
@@ -256,8 +207,6 @@ void renderer_initialize_resources(
 	resources->renderFinished = renderer_get_semaphore(resources->device);
 
     EngineRun(resources);
-
-    EngineDestroy(resources);
 }
 
 VkInstance renderer_get_instance()
@@ -1809,4 +1758,70 @@ void drawFrame(struct renderer_resources* resources)
     presentInfo.pResults = NULL;
 
     vkQueuePresentKHR(resources->present_queue, &presentInfo);
+}
+
+void renderer_destroy_resources(
+        struct renderer_resources* resources)
+{
+    vkDestroySemaphore(resources->device, resources->imageAvailable, NULL);
+    vkDestroySemaphore(resources->device, resources->renderFinished, NULL);
+
+    for (uint32_t i = 0; i < resources->imageCount; i++) {
+        vkDestroyFramebuffer(
+            resources->device,
+            resources->framebuffers[i],
+            NULL
+        );
+    }
+
+    vkDestroyPipeline(
+        resources->device,
+        resources->graphics_pipeline,
+        NULL
+    );
+
+    vkDestroyPipelineLayout(
+        resources->device,
+        resources->pipeline_layout,
+        NULL
+    );
+
+    vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
+
+    for (uint32_t i = 0; i < resources->imageCount; i++)
+    {
+        vkDestroyImageView(
+            resources->device,
+            resources->swapchain_buffers[i].image_view,
+            NULL
+        );
+        vkFreeCommandBuffers(
+            resources->device,
+            resources->command_pool,
+            1,
+            &resources->swapchain_buffers[i].cmd
+        );
+    }
+    free(resources->swapchain_buffers);
+
+    vkDestroyCommandPool(resources->device, resources->command_pool, NULL);
+
+    vkDestroySwapchainKHR(resources->device, resources->swapchain, NULL);
+
+    vkDestroyDevice(resources->device, NULL);
+
+    vkDestroySurfaceKHR(resources->instance, resources->surface, NULL);
+
+    for (uint32_t i = 0; i < resources->surface_extension_count; i++)
+        free(resources->surface_extensions[i]);
+
+    for (uint32_t i = 0; i < resources->device_extension_count; i++)
+        free(resources->device_extensions[i]);
+
+    renderer_destroy_debug_callback_ext(
+        resources->instance,
+        resources->debug_callback_ext
+    );
+
+    vkDestroyInstance(resources->instance, NULL);
 }

@@ -227,4 +227,8 @@ VkSemaphore renderer_get_semaphore(
     VkDevice device
 );
 
+void renderer_destroy_resources(
+    struct renderer_resources* resources
+);
+
 #endif

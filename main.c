@@ -22,6 +22,7 @@ int main()
     glfwDestroyWindow(window);
     glfwTerminate();
 
+    renderer_destroy_resources(renderer_resources);
     free(renderer_resources);
 
     return 0;
