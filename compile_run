@@ -6,5 +6,5 @@ if gcc -Wall -Wextra -Wpedantic renderer.c main.c -o main -lglfw3 -lGL -lm -ldl 
     echo "compile_run: compilation success"
     ./main
 else
-    echo "compile_run: Compilation failure"
+    echo "compile_run: compilation failure"
 fi

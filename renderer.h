@@ -76,15 +76,6 @@ void renderer_init();
 
 VkInstance renderer_get_instance();
 
-_Bool checkValidationSupport(
-    uint32_t validationLayerCount,
-    const char** validationLayers
-);
-
-void getRequiredExtensions(
-    struct renderer_resources* resources
-);
-
 VkDebugReportCallbackEXT renderer_get_debug_callback_ext(
     VkInstance instance
 );
