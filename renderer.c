@@ -205,18 +205,14 @@ VkInstance renderer_get_instance()
         available_layers
     );
 
-    uint32_t i, j;
     bool layer_found = true;
-    for (i = 0; i < enabled_layer_count; i++)
-    {
+    for (uint32_t i = 0; i < enabled_layer_count; i++) {
         if (VALIDATION_ENABLED)
             break;
 
         layer_found = false;
-        for (j = 0; j < available_layer_count; j++)
-        {
-            if (!strcmp(enabled_layers[i], available_layers[j].layerName))
-            {
+        for (uint32_t j = 0; j < available_layer_count; j++) {
+            if (!strcmp(enabled_layers[i], available_layers[j].layerName)) {
                 layer_found = true;
                 break;
             }
@@ -249,15 +245,16 @@ VkInstance renderer_get_instance()
     uint32_t all_extension_count = glfw_extension_count + my_extension_count;
     all_extensions = malloc(all_extension_count * sizeof(char*));
 
-    for (i=0; i<glfw_extension_count; i++)
-    {
+    for (uint32_t i = 0; i < glfw_extension_count; i++) {
         all_extensions[i] = calloc(1, strlen(glfw_extensions[i]) + 1);
         strcpy(all_extensions[i], glfw_extensions[i]);
     }
-    for (j=0; j<my_extension_count; j++)
-    {
-        all_extensions[i+j] = calloc(1, strlen(my_extensions[j]) + 1);
-        strcpy(all_extensions[i+j], my_extensions[j]);
+
+    for (uint32_t j = 0; j < my_extension_count; j++) {
+        all_extensions[glfw_extension_count + j] = calloc(
+            1, strlen(my_extensions[j]) + 1
+        );
+        strcpy(all_extensions[glfw_extension_count + j], my_extensions[j]);
     }
 
     create_info.enabledExtensionCount = all_extension_count;
@@ -272,8 +269,9 @@ VkInstance renderer_get_instance()
     );
     assert(result == VK_SUCCESS);
 
-    for (i=0; i<all_extension_count; i++)
+    for (uint32_t i = 0; i < all_extension_count; i++)
         free(all_extensions[i]);
+
     free(all_extensions);
     free(available_layers);
 
@@ -294,11 +292,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     assert(message);
 
     if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT)
-        sprintf(message, "%s error, code %d: %s",
-                pLayerPrefix, code, pMsg);
+        sprintf(message, "%s error, code %d: %s", pLayerPrefix, code, pMsg);
     else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT)
-        sprintf(message, "%s warning, code %d: %s",
-                pLayerPrefix, code, pMsg);
+        sprintf(message, "%s warning, code %d: %s", pLayerPrefix, code, pMsg);
     else
         return VK_FALSE;
 
@@ -410,16 +406,10 @@ bool physical_device_extensions_supported(
     );
 
     // Determine if device's extensions contain necessary extensions
-    uint32_t i, j;
-    for (i=0; i<required_extension_count; i++)
-    {
-        for (j=0; j<available_extension_count; j++)
-        {
-            if (strcmp(
-                    required_extensions[i],
-                    available_extensions[j].extensionName
-                ))
-            {
+    for (uint32_t i = 0; i < required_extension_count; i++) {
+        for (uint32_t j = 0; j < available_extension_count; j++) {
+            if (strcmp(required_extensions[i],
+                        available_extensions[j].extensionName)) {
                 return false;
             }
         }
@@ -455,15 +445,12 @@ VkPhysicalDevice renderer_get_physical_device(
         physical_devices
     );
 
-    uint32_t i;
-    for (i=0; i<physical_device_count; i++)
-    {
+    for (uint32_t i = 0; i < physical_device_count; i++) {
         // Ensure required extensions are supported
         if (physical_device_extensions_supported(
                 physical_devices[i],
                 device_extension_count,
-                device_extensions))
-        {
+                device_extensions)) {
             printf("Extensions not supported\n");
             continue;
         }
@@ -515,11 +502,9 @@ VkPhysicalDevice renderer_get_physical_device(
             queue_family_properties
         );
 
-        uint32_t j;
         VkBool32 wsi_support = VK_FALSE;
         VkBool32 graphics_bit = VK_FALSE;
-        for (j=0; j<queue_family_count; j++)
-        {
+        for (uint32_t j = 0; j < queue_family_count; j++) {
             graphics_bit =
                 queue_family_properties[j].queueCount > 0 &&
                 queue_family_properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT;
@@ -583,8 +568,7 @@ VkDevice renderer_get_device(
         sizeof(*device_queue_infos) * device_queue_count
     );
 
-    uint32_t i;
-    for (i=0; i<device_queue_count; i++) {
+    for (uint32_t i = 0; i < device_queue_count; i++) {
         VkDeviceQueueCreateInfo device_queue_info = {
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = NULL,
@@ -650,13 +634,10 @@ uint32_t renderer_get_graphics_queue_family(
         queue_family_properties
     );
 
-    uint32_t i;
     bool graphics_queue_found = false;
-    for (i=0; i<queue_family_count; i++)
-    {
+    for (uint32_t i = 0; i < queue_family_count; i++) {
         if (queue_family_properties[i].queueCount > 0 &&
-            queue_family_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-        {
+                queue_family_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             graphics_queue_index = i;
             graphics_queue_found = true;
             break;
@@ -693,11 +674,9 @@ uint32_t renderer_get_present_queue_family(
         queue_family_properties
     );
 
-    uint32_t i;
     VkBool32 wsi_support;
     bool present_queue_found = false;
-    for (i=0; i<queue_family_count; i++)
-    {
+    for (uint32_t i = 0; i < queue_family_count; i++) {
         VkResult wsi_query_result;
         wsi_query_result = vkGetPhysicalDeviceSurfaceSupportKHR(
             physical_device,
@@ -746,21 +725,18 @@ VkSurfaceFormatKHR renderer_get_swapchain_image_format(
     assert(result == VK_SUCCESS);
 
     // Free to choose any format
-    if (format_count == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
-    {
+    if (format_count == 1 && formats[0].format == VK_FORMAT_UNDEFINED) {
         image_format.format = VK_FORMAT_B8G8R8A8_UNORM;
         image_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     }
     // Limited selection of formats
     else
     {
-        uint32_t i;
         bool ideal_format_found = false;
-        for (i=0; i<format_count; i++)
-        {
+        for (uint32_t i = 0; i < format_count; i++) {
             // Ideal format B8G8R8A8_UNORM, SRGB_NONLINEAR
             if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM &&
-                formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                    formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             {
                 image_format = formats[i];
                 ideal_format_found = true;
@@ -768,8 +744,7 @@ VkSurfaceFormatKHR renderer_get_swapchain_image_format(
             }
         }
 
-        if (!ideal_format_found)
-        {
+        if (!ideal_format_found) {
             image_format = formats[0];
         }
     }
@@ -799,8 +774,7 @@ VkExtent2D renderer_get_swapchain_extent(
     );
     assert(result == VK_SUCCESS);
 
-    if (surface_capabilities.currentExtent.width == UINT32_MAX)
-    {
+    if (surface_capabilities.currentExtent.width == UINT32_MAX) {
         extent.width = MAX(
             surface_capabilities.minImageExtent.width,
             MIN(surface_capabilities.maxImageExtent.width, extent.width)
@@ -839,8 +813,7 @@ VkSwapchainKHR renderer_get_swapchain(
     uint32_t desired_image_count;
     desired_image_count = surface_capabilities.minImageCount + 1;
     if (desired_image_count > 0 &&
-        desired_image_count > surface_capabilities.maxImageCount)
-    {
+            desired_image_count > surface_capabilities.maxImageCount) {
         desired_image_count = surface_capabilities.maxImageCount;
     }
 
@@ -858,8 +831,7 @@ VkSwapchainKHR renderer_get_swapchain(
         surface
     );
 
-    if (graphics_family_index != present_family_index)
-    {
+    if (graphics_family_index != present_family_index) {
         sharing_mode = VK_SHARING_MODE_CONCURRENT;
         queue_family_count = 2;
         const uint32_t indices[] = {
@@ -867,9 +839,7 @@ VkSwapchainKHR renderer_get_swapchain(
             present_family_index
         };
         queue_family_indices = indices;
-    }
-    else
-    {
+    } else {
         sharing_mode = VK_SHARING_MODE_EXCLUSIVE;
         queue_family_count = 0;
         queue_family_indices = NULL;
@@ -898,11 +868,8 @@ VkSwapchainKHR renderer_get_swapchain(
         present_modes
     );
 
-    uint32_t i;
-    for (i=0; i<present_mode_count; i++)
-    {
-        if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
-        {
+    for (uint32_t i = 0; i < present_mode_count; i++) {
+        if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
             present_mode = present_modes[i];
             break;
         }
@@ -939,8 +906,7 @@ VkSwapchainKHR renderer_get_swapchain(
     );
     assert(result == VK_SUCCESS);
 
-    if (old_swapchain != VK_NULL_HANDLE)
-    {
+    if (old_swapchain != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(
             device,
             old_swapchain,
@@ -1045,9 +1011,7 @@ void renderer_create_swapchain_buffers(
         .viewType = VK_IMAGE_VIEW_TYPE_2D
     };
 
-    uint32_t i;
-    for (i=0; i<swapchain_image_count; i++)
-    {
+    for (uint32_t i = 0; i < swapchain_image_count; i++) {
         result = vkAllocateCommandBuffers(
             device,
             &cmd_alloc_info,
@@ -1302,8 +1266,7 @@ VkPipeline renderer_get_graphics_pipeline(
     VkPipelineShaderStageCreateInfo* shader_infos;
     shader_infos = malloc(shader_stage_count * sizeof(*shader_infos));
 
-    uint32_t i;
-    for (i=0; i<shader_stage_count; i++) {
+    for (uint32_t i=0; i<shader_stage_count; i++) {
         shader_infos[i].sType =
             VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shader_infos[i].pNext = NULL;
@@ -1535,9 +1498,7 @@ void renderer_create_framebuffers(
         .layers = 1
     };
 
-    uint32_t i;
-    for (i=0; i<swapchain_image_count; i++)
-    {
+    for (uint32_t i = 0; i < swapchain_image_count; i++) {
         attachments[0] = swapchain_buffers[i].image_view;
 
         VkResult result;
@@ -1582,8 +1543,7 @@ void renderer_record_draw_commands(
         .pClearValues = &clear_value,
     };
 
-    uint32_t i;
-    for (i=0; i<swapchain_image_count; i++) {
+    for (uint32_t i = 0; i < swapchain_image_count; i++) {
         VkResult result;
         result = vkBeginCommandBuffer(
             swapchain_buffers[i].cmd,
@@ -1730,8 +1690,7 @@ void drawFrame(struct renderer_resources* resources)
         &submitInfo,
         VK_NULL_HANDLE
     );
-    if (result != VK_SUCCESS)
-    {
+    if (result != VK_SUCCESS) {
         fprintf(stderr, "Error while submitting queue.\n");
         exit(-1);
     }
@@ -1784,8 +1743,7 @@ void renderer_resize(
 
     vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
 
-    for (uint32_t i = 0; i < resources->imageCount; i++)
-    {
+    for (uint32_t i = 0; i < resources->imageCount; i++) {
         vkDestroyImageView(
             resources->device,
             resources->swapchain_buffers[i].image_view,
@@ -1897,8 +1855,7 @@ void renderer_destroy_resources(
 
     vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
 
-    for (uint32_t i = 0; i < resources->imageCount; i++)
-    {
+    for (uint32_t i = 0; i < resources->imageCount; i++) {
         vkDestroyImageView(
             resources->device,
             resources->swapchain_buffers[i].image_view,

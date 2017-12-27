@@ -18,6 +18,7 @@
 
 // TODO:
 // - Pool for queues?
+// - Fix images being malloc'd every time create_swapchain_buffers called
 // -
 
 struct swapchain_buffer
