@@ -227,7 +227,7 @@ VkSemaphore renderer_get_semaphore(
 void drawFrame(struct renderer_resources* resources);
 
 void renderer_resize(
-    struct renderer_resources* resources
+    GLFWwindow* window, int width, int height
 );
 
 void renderer_destroy_resources(

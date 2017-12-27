@@ -13,8 +13,6 @@ void renderer_initialize_resources(
     memset(resources, 0, sizeof(*resources));
 
     resources->window = window;
-    int window_width, window_height = 0;
-    glfwGetWindowSize(window, &window_width, &window_height);
 
     resources->instance = renderer_get_instance();
 
@@ -75,6 +73,8 @@ void renderer_initialize_resources(
 		resources->surface
     );
 
+    int window_width, window_height = 0;
+    glfwGetWindowSize(window, &window_width, &window_height);
     resources->swapchain_extent = renderer_get_swapchain_extent(
         resources->physical_device,
         resources->surface,
@@ -1692,7 +1692,9 @@ VkSemaphore renderer_get_semaphore(
 void drawFrame(struct renderer_resources* resources)
 {
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(
+
+    VkResult result;
+    result = vkAcquireNextImageKHR(
         resources->device,
         resources->swapchain,
         UINT64_MAX, // Wait for next image indefinitely (ns)
@@ -1700,6 +1702,7 @@ void drawFrame(struct renderer_resources* resources)
         VK_NULL_HANDLE,
         &imageIndex
     );
+    assert(result == VK_SUCCESS);
 
     VkSubmitInfo submitInfo;
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1715,13 +1718,12 @@ void drawFrame(struct renderer_resources* resources)
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &(resources->swapchain_buffers[imageIndex].cmd);
+    submitInfo.pCommandBuffers = &resources->swapchain_buffers[imageIndex].cmd;
 
     VkSemaphore signalSemaphores[] = { resources->renderFinished };
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    VkResult result;
     result = vkQueueSubmit(
         resources->graphics_queue,
         1,
@@ -1753,8 +1755,57 @@ void drawFrame(struct renderer_resources* resources)
 }
 
 void renderer_resize(
-        struct renderer_resources* resources)
+        GLFWwindow* window, int width, int height)
 {
+    struct renderer_resources* resources;
+    resources = (struct renderer_resources*)glfwGetWindowUserPointer(window);
+
+    vkDeviceWaitIdle(resources->device);
+
+    for (uint32_t i = 0; i < resources->imageCount; i++) {
+        vkDestroyFramebuffer(
+            resources->device,
+            resources->framebuffers[i],
+            NULL
+        );
+    }
+
+    vkDestroyPipeline(
+        resources->device,
+        resources->graphics_pipeline,
+        NULL
+    );
+
+    vkDestroyPipelineLayout(
+        resources->device,
+        resources->pipeline_layout,
+        NULL
+    );
+
+    vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
+
+    for (uint32_t i = 0; i < resources->imageCount; i++)
+    {
+        vkDestroyImageView(
+            resources->device,
+            resources->swapchain_buffers[i].image_view,
+            NULL
+        );
+        vkFreeCommandBuffers(
+            resources->device,
+            resources->command_pool,
+            1,
+            &resources->swapchain_buffers[i].cmd
+        );
+    }
+
+    resources->swapchain_extent = renderer_get_swapchain_extent(
+        resources->physical_device,
+        resources->surface,
+        width,
+        height
+    );
+
     resources->swapchain = renderer_get_swapchain(
         resources->physical_device,
         resources->device,
@@ -1764,13 +1815,58 @@ void renderer_resize(
         resources->swapchain
     );
 
-    vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
+    resources->imageCount = renderer_get_swapchain_image_count(
+        resources->device,
+        resources->swapchain
+    );
+
+    renderer_create_swapchain_buffers(
+        resources->device,
+        resources->command_pool,
+        resources->swapchain,
+        resources->swapchain_image_format,
+        resources->swapchain_buffers,
+        resources->imageCount
+    );
+
 	resources->render_pass = renderer_get_render_pass(
 		resources->device,
 		resources->swapchain_image_format.format
 	);
 
-    vkDestroyPipeline(resources->device, resources->graphics_pipeline, NULL);
+    resources->pipeline_layout = renderer_get_pipeline_layout(
+        resources->device,
+        NULL,
+        0,
+        NULL,
+        0
+    );
+
+    resources->graphics_pipeline = renderer_get_graphics_pipeline(
+        resources->device,
+        resources->swapchain_extent,
+        resources->pipeline_layout,
+        resources->render_pass,
+        0
+    );
+
+	renderer_create_framebuffers(
+		resources->device,
+        resources->render_pass,
+        resources->swapchain_extent,
+        resources->swapchain_buffers,
+        resources->framebuffers,
+        resources->imageCount
+    );
+
+    renderer_record_draw_commands(
+        resources->graphics_pipeline,
+        resources->render_pass,
+        resources->swapchain_extent,
+        resources->framebuffers,
+        resources->swapchain_buffers,
+        resources->imageCount
+    );
 }
 
 void renderer_destroy_resources(

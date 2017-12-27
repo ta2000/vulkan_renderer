@@ -4,6 +4,9 @@
 
 int main()
 {
+    struct renderer_resources* renderer_resources;
+    renderer_resources = malloc(sizeof(*renderer_resources));
+
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(
@@ -12,9 +15,8 @@ int main()
         NULL,
         NULL
     );
-
-    struct renderer_resources* renderer_resources;
-    renderer_resources = malloc(sizeof(*renderer_resources));
+    glfwSetWindowUserPointer(window, renderer_resources);
+    glfwSetWindowSizeCallback(window, renderer_resize);
 
     renderer_initialize_resources(renderer_resources, window);
 
