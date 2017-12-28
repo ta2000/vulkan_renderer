@@ -19,7 +19,22 @@
 // TODO:
 // - Pool for queues?
 // - Fix images being malloc'd every time create_swapchain_buffers called
+// - Device features
 // -
+
+struct renderer_vertex
+{
+    float x, y;
+    float r, b, g;
+};
+
+struct renderer_buffer
+{
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+    VkDeviceSize size;
+    void* mapped;
+};
 
 struct swapchain_buffer
 {
@@ -66,6 +81,10 @@ struct renderer_resources
     VkFramebuffer* framebuffers;
 
     VkCommandPool command_pool;
+
+    struct renderer_buffer vbo;
+    struct renderer_buffer ibo;
+    uint32_t index_count;
 
     VkSemaphore imageAvailable;
     VkSemaphore renderFinished;
@@ -210,6 +229,44 @@ void renderer_create_framebuffers(
 	uint32_t swapchain_image_count
 );
 
+uint32_t renderer_find_memory_type(
+	uint32_t memory_type_bits,
+	VkMemoryPropertyFlags properties,
+	uint32_t memory_type_count,
+	VkMemoryType* memory_types
+);
+
+struct renderer_buffer renderer_get_buffer(
+    VkPhysicalDevice physical_device,
+    VkDevice device,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags memory_flags
+);
+
+struct renderer_buffer renderer_get_vertex_buffer(
+	VkPhysicalDevice physical_device,
+	VkDevice device,
+	VkQueue queue,
+	VkCommandPool command_pool,
+	struct renderer_vertex* vertices,
+	uint32_t vertex_count
+);
+
+struct renderer_buffer renderer_get_index_buffer(
+    VkPhysicalDevice physical_device,
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool command_pool,
+    uint32_t* indices,
+    uint32_t index_count
+);
+
+void renderer_submit_command_buffer(
+    VkQueue queue,
+    VkCommandBuffer* cmd
+);
+
 void renderer_record_draw_commands(
     VkPipeline pipeline,
     //VkPipelineLayout pipeline_layout,
@@ -217,8 +274,11 @@ void renderer_record_draw_commands(
     VkExtent2D swapchain_extent,
     VkFramebuffer* framebuffers,
     struct swapchain_buffer* swapchain_buffers,
-    uint32_t swapchain_image_count
-    //struct renderer_mesh* mesh)
+    uint32_t swapchain_image_count,
+    struct renderer_buffer vertex_buffer,
+    struct renderer_buffer index_buffer,
+    uint32_t index_count
+    //struct renderer_mesh* mesh
 );
 
 VkSemaphore renderer_get_semaphore(

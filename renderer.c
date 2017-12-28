@@ -145,13 +145,42 @@ void renderer_initialize_resources(
         resources->imageCount
     );
 
+	struct renderer_vertex vertices[] = {
+        {.x=-0.5f, .y=-0.5f, .r=0.0f, .g=0.0f, .b=1.0f},
+        {.x=0.5f, .y=-0.5f, .r=0.0f, .g=1.0f, .b=0.0f},
+        {.x=0.5f, .y=0.5f, .r=0.0f, .g=1.0f, .b=1.0f},
+        {.x=-0.5f, .y=0.5f, .r=1.0f, .g=0.0f, .b=0.0f}
+    };
+    resources->vbo = renderer_get_vertex_buffer(
+        resources->physical_device,
+        resources->device,
+        resources->graphics_queue,
+        resources->command_pool,
+        vertices, 4
+    );
+
+	uint32_t indices[] = {
+        0, 1, 2, 2, 3, 0
+    };
+    resources->ibo = renderer_get_index_buffer(
+        resources->physical_device,
+        resources->device,
+        resources->graphics_queue,
+        resources->command_pool,
+        indices, 6
+    );
+    resources->index_count = 6;
+
     renderer_record_draw_commands(
         resources->graphics_pipeline,
         resources->render_pass,
         resources->swapchain_extent,
         resources->framebuffers,
         resources->swapchain_buffers,
-        resources->imageCount
+        resources->imageCount,
+        resources->vbo,
+        resources->ibo,
+        resources->index_count
     );
 
 	resources->imageAvailable = renderer_get_semaphore(resources->device);
@@ -1277,13 +1306,27 @@ VkPipeline renderer_get_graphics_pipeline(
         shader_infos[i].pSpecializationInfo = NULL;
     }
 
-    /*VkVertexInputBindingDescription binding_description = {
+    VkVertexInputBindingDescription binding_description = {
         .binding = 0,
         .stride = sizeof(struct renderer_vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
     };
 
     VkVertexInputAttributeDescription position_attribute_description = {
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = offsetof(struct renderer_vertex, x)
+    };
+
+    VkVertexInputAttributeDescription texture_attribute_description = {
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = offsetof(struct renderer_vertex, r)
+    };
+
+    /*VkVertexInputAttributeDescription position_attribute_description = {
         .location = 0,
         .binding = 0,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
@@ -1295,21 +1338,21 @@ VkPipeline renderer_get_graphics_pipeline(
         .binding = 0,
         .format = VK_FORMAT_R32G32_SFLOAT,
         .offset = offsetof(struct renderer_vertex, u)
-    };
+    };*/
 
     VkVertexInputAttributeDescription attribute_descriptions[] = {
         position_attribute_description,
         texture_attribute_description
-    };*/
+    };
 
     VkPipelineVertexInputStateCreateInfo vertex_input_state = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO/*,
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .pNext = NULL,
         .flags = 0,
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &binding_description,
         .vertexAttributeDescriptionCount = 2,
-        .pVertexAttributeDescriptions = attribute_descriptions*/
+        .pVertexAttributeDescriptions = attribute_descriptions
     };
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {
@@ -1512,6 +1555,296 @@ void renderer_create_framebuffers(
     }
 }
 
+uint32_t renderer_find_memory_type(
+        uint32_t memory_type_bits,
+        VkMemoryPropertyFlags properties,
+        uint32_t memory_type_count,
+        VkMemoryType* memory_types)
+{
+    uint32_t memory_type;
+
+    uint32_t i;
+    bool memory_type_found = false;
+    for (i=0; i<memory_type_count; ++i)
+    {
+        if ((memory_type_bits & (1 << i)) &&
+            (memory_types[i].propertyFlags & properties) == properties)
+        {
+            memory_type = i;
+            memory_type_found = true;
+            break;
+        }
+    }
+
+    assert(memory_type_found);
+
+    return memory_type;
+}
+
+struct renderer_buffer renderer_get_buffer(
+        VkPhysicalDevice physical_device,
+        VkDevice device,
+        VkDeviceSize size,
+        VkBufferUsageFlags usage,
+        VkMemoryPropertyFlags memory_flags)
+{
+    struct renderer_buffer buffer;
+
+    VkBufferCreateInfo buffer_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .size = size,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = NULL
+    };
+    vkCreateBuffer(device, &buffer_info, NULL, &buffer.buffer);
+
+    VkMemoryRequirements mem_reqs;
+    vkGetBufferMemoryRequirements(device, buffer.buffer, &mem_reqs);
+
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_props);
+
+    VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = NULL,
+        .allocationSize = mem_reqs.size,
+        .memoryTypeIndex = renderer_find_memory_type(
+            mem_reqs.memoryTypeBits,
+            memory_flags,
+            mem_props.memoryTypeCount,
+            mem_props.memoryTypes
+        )
+    };
+
+    VkResult result;
+    result = vkAllocateMemory(
+        device,
+        &alloc_info,
+        NULL,
+        &buffer.memory
+    );
+    assert(result == VK_SUCCESS);
+
+    vkBindBufferMemory(
+        device,
+        buffer.buffer,
+        buffer.memory,
+        0
+    );
+
+    return buffer;
+}
+
+struct renderer_buffer renderer_get_vertex_buffer(
+        VkPhysicalDevice physical_device,
+        VkDevice device,
+        VkQueue queue,
+        VkCommandPool command_pool,
+        struct renderer_vertex* vertices,
+        uint32_t vertex_count)
+{
+    struct renderer_buffer vbo;
+    struct renderer_buffer staging_vbo;
+
+    VkDeviceSize mem_size = sizeof(*vertices) * vertex_count;
+
+    staging_vbo = renderer_get_buffer(
+        physical_device,
+        device,
+        mem_size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    vkMapMemory(device, staging_vbo.memory, 0, mem_size, 0, &vbo.mapped);
+    memcpy(vbo.mapped, vertices, (size_t)mem_size);
+    vkUnmapMemory(device, staging_vbo.memory);
+
+    vbo = renderer_get_buffer(
+        physical_device,
+        device,
+        mem_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    VkCommandBuffer copy_cmd;
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+    VkResult result;
+    result = vkAllocateCommandBuffers(device, &cmd_alloc_info, &copy_cmd);
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo cmd_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = NULL
+    };
+    result = vkBeginCommandBuffer(copy_cmd, &cmd_begin_info);
+    assert(result == VK_SUCCESS);
+
+    VkBufferCopy region = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = mem_size
+    };
+
+    vkCmdCopyBuffer(
+        copy_cmd,
+        staging_vbo.buffer,
+        vbo.buffer,
+        1,
+        &region
+    );
+
+    renderer_submit_command_buffer(
+        queue,
+        &copy_cmd
+    );
+
+    vkFreeCommandBuffers(
+        device,
+        command_pool,
+        1,
+        &copy_cmd
+    );
+
+    vkDestroyBuffer(device, staging_vbo.buffer, NULL);
+    vkFreeMemory(device, staging_vbo.memory, NULL);
+
+    return vbo;
+}
+
+struct renderer_buffer renderer_get_index_buffer(
+        VkPhysicalDevice physical_device,
+        VkDevice device,
+        VkQueue queue,
+        VkCommandPool command_pool,
+        uint32_t* indices,
+        uint32_t index_count)
+{
+    struct renderer_buffer ibo;
+    struct renderer_buffer staging_ibo;
+
+    VkDeviceSize mem_size = sizeof(*indices) * index_count;
+
+    staging_ibo = renderer_get_buffer(
+        physical_device,
+        device,
+        mem_size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    vkMapMemory(device, staging_ibo.memory, 0, mem_size, 0, &ibo.mapped);
+    memcpy(ibo.mapped, indices, (size_t)mem_size);
+    vkUnmapMemory(device, staging_ibo.memory);
+
+    ibo = renderer_get_buffer(
+        physical_device,
+        device,
+        mem_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    VkCommandBuffer copy_cmd;
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+    VkResult result;
+    result = vkAllocateCommandBuffers(device, &cmd_alloc_info, &copy_cmd);
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo cmd_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = NULL
+    };
+    result = vkBeginCommandBuffer(copy_cmd, &cmd_begin_info);
+    assert(result == VK_SUCCESS);
+
+    VkBufferCopy region = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = mem_size
+    };
+
+    vkCmdCopyBuffer(
+        copy_cmd,
+        staging_ibo.buffer,
+        ibo.buffer,
+        1,
+        &region
+    );
+
+    renderer_submit_command_buffer(
+        queue,
+        &copy_cmd
+    );
+
+    vkFreeCommandBuffers(
+        device,
+        command_pool,
+        1,
+        &copy_cmd
+    );
+
+    vkDestroyBuffer(device, staging_ibo.buffer, NULL);
+    vkFreeMemory(device, staging_ibo.memory, NULL);
+
+    return ibo;
+}
+
+void renderer_submit_command_buffer(
+        VkQueue queue,
+        VkCommandBuffer* cmd)
+{
+    vkEndCommandBuffer(*cmd);
+
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = NULL,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = NULL,
+        .pWaitDstStageMask = NULL,
+        .commandBufferCount = 1,
+        .pCommandBuffers = cmd,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = NULL
+    };
+
+    VkResult result;
+    result = vkQueueSubmit(
+        queue,
+        1,
+        &submit_info,
+        VK_NULL_HANDLE
+    );
+    assert(result == VK_SUCCESS);
+
+    vkQueueWaitIdle(queue);
+}
+
 void renderer_record_draw_commands(
         VkPipeline pipeline,
         //VkPipelineLayout pipeline_layout,
@@ -1519,7 +1852,10 @@ void renderer_record_draw_commands(
         VkExtent2D swapchain_extent,
         VkFramebuffer* framebuffers,
         struct swapchain_buffer* swapchain_buffers,
-        uint32_t swapchain_image_count)
+        uint32_t swapchain_image_count,
+        struct renderer_buffer vbo,
+        struct renderer_buffer ibo,
+		uint32_t index_count)
         //struct renderer_mesh* mesh)
 {
     VkCommandBufferBeginInfo cmd_begin_info = {
@@ -1580,24 +1916,24 @@ void renderer_record_draw_commands(
             pipeline
         );
 
-        /*VkDeviceSize offsets[] = {0};
+        VkDeviceSize offsets[] = {0};
 
         vkCmdBindVertexBuffers(
             swapchain_buffers[i].cmd,
             0,
             1,
-            &mesh->vbo.buffer,
+            &vbo.buffer,
             offsets
         );
 
         vkCmdBindIndexBuffer(
             swapchain_buffers[i].cmd,
-            mesh->ibo.buffer,
+            ibo.buffer,
             0,
             VK_INDEX_TYPE_UINT32
         );
 
-        vkCmdBindDescriptorSets(
+        /*vkCmdBindDescriptorSets(
             swapchain_buffers[i].cmd,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout,
@@ -1606,18 +1942,18 @@ void renderer_record_draw_commands(
             &mesh->descriptor_set,
             0,
             NULL
-        );
+        );*/
 
         vkCmdDrawIndexed(
             swapchain_buffers[i].cmd,
-            mesh->index_count,
+            index_count,
             1,
             0,
             0,
             0
-        );*/
+        );
 
-        vkCmdDraw(swapchain_buffers[i].cmd, 3, 1, 0, 0);
+        /*vkCmdDraw(swapchain_buffers[i].cmd, 3, 1, 0, 0);*/
 
         vkCmdEndRenderPass(swapchain_buffers[i].cmd);
 
@@ -1823,13 +2159,21 @@ void renderer_resize(
         resources->swapchain_extent,
         resources->framebuffers,
         resources->swapchain_buffers,
-        resources->imageCount
+        resources->imageCount,
+        resources->vbo,
+        resources->ibo,
+        resources->index_count
     );
 }
 
 void renderer_destroy_resources(
         struct renderer_resources* resources)
 {
+    vkDestroyBuffer(resources->device, resources->vbo.buffer, NULL);
+    vkFreeMemory(resources->device, resources->vbo.memory, NULL);
+    vkDestroyBuffer(resources->device, resources->ibo.buffer, NULL);
+    vkFreeMemory(resources->device, resources->ibo.memory, NULL);
+
     vkDestroySemaphore(resources->device, resources->imageAvailable, NULL);
     vkDestroySemaphore(resources->device, resources->renderFinished, NULL);
 
