@@ -113,6 +113,38 @@ void renderer_initialize_resources(
         resources->imageCount
     );
 
+    resources->descriptor_pool = renderer_get_descriptor_pool(
+        resources->device
+    );
+
+    resources->descriptor_layout = renderer_get_descriptor_layout(
+        resources->device
+    );
+
+    resources->uniform_buffer = renderer_get_buffer(
+        resources->physical_device,
+        resources->device,
+        sizeof(mat4x4) * 3,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+    );
+
+    resources->descriptor_set = renderer_get_descriptor_set(
+        resources->device,
+        resources->descriptor_pool,
+        &resources->descriptor_layout,
+        1,
+        &resources->uniform_buffer
+    );
+
+    renderer_update_uniform_buffer(
+        resources->device,
+        resources->swapchain_extent,
+        &resources->uniform_buffer,
+        &resources->ubo
+    );
+
 	resources->render_pass = renderer_get_render_pass(
 		resources->device,
 		resources->swapchain_image_format.format
@@ -120,8 +152,8 @@ void renderer_initialize_resources(
 
     resources->pipeline_layout = renderer_get_pipeline_layout(
         resources->device,
-        NULL,
-        0,
+        &resources->descriptor_layout,
+        1,
         NULL,
         0
     );
@@ -180,7 +212,9 @@ void renderer_initialize_resources(
         resources->imageCount,
         resources->vbo,
         resources->ibo,
-        resources->index_count
+        resources->index_count,
+        resources->pipeline_layout,
+        &resources->descriptor_set
     );
 
 	resources->imageAvailable = renderer_get_semaphore(resources->device);
@@ -1152,6 +1186,250 @@ VkRenderPass renderer_get_render_pass(
     return render_pass_handle;
 }
 
+VkDescriptorPool renderer_get_descriptor_pool(
+        VkDevice device)
+{
+    VkDescriptorPool descriptor_pool_handle;
+    descriptor_pool_handle = VK_NULL_HANDLE;
+
+    VkDescriptorPoolSize ubo_pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1
+    };
+
+    /*VkDescriptorPoolSize sampler_pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1
+    };*/
+
+    VkDescriptorPoolSize pool_sizes[] = {
+        ubo_pool_size
+        //sampler_pool_size
+    };
+
+    VkDescriptorPoolCreateInfo descriptor_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .maxSets = 1,
+        .poolSizeCount = 1,
+        //.poolSizeCount = 2,
+        .pPoolSizes = pool_sizes
+    };
+
+    VkResult result;
+    result = vkCreateDescriptorPool(
+        device,
+        &descriptor_pool_info,
+        NULL,
+        &descriptor_pool_handle
+    );
+    assert(result == VK_SUCCESS);
+
+    return descriptor_pool_handle;
+}
+
+VkDescriptorSetLayout renderer_get_descriptor_layout(
+        VkDevice device)
+{
+    VkDescriptorSetLayout descriptor_layout_handle;
+    descriptor_layout_handle = VK_NULL_HANDLE;
+
+    VkDescriptorSetLayoutBinding ubo_layout_binding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .pImmutableSamplers = NULL
+    };
+
+    /*VkDescriptorSetLayoutBinding sampler_layout_binding = {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .pImmutableSamplers = NULL
+    };*/
+
+    VkDescriptorSetLayoutBinding layoutBindings[2] = {
+        ubo_layout_binding
+        //sampler_layout_binding
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptor_layout_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .bindingCount = 1,
+        //.bindingCount = 2,
+        .pBindings = layoutBindings
+    };
+
+    VkResult result;
+    result = vkCreateDescriptorSetLayout(
+        device,
+        &descriptor_layout_info,
+        NULL,
+        &descriptor_layout_handle
+    );
+    assert(result == VK_SUCCESS);
+
+	return descriptor_layout_handle;
+}
+
+/*void renderer_update_uniform_buffer(
+        VkPhysicalDevice physical_device,
+        VkDevice device,
+        VkQueue queue,
+        VkCommandPool command_pool,
+        VkExtent2D swapchain_extent,
+        struct renderer_buffer* uniform_buffer)
+{
+    mat4x4 viewprojection[2];
+    memset(viewprojection, 0, sizeof(viewprojection));
+
+    vec3 eye = {12.0f, 12.0f, 12.0f};
+    vec3 center = {0.0f, 0.0f, 0.0f};
+    vec3 up = {0.0f, 0.0f, 1.0f};
+    mat4x4_look_at(viewprojection[0], eye, center, up);
+
+    float aspect = (float)swapchain_extent.width/swapchain_extent.height;
+
+    mat4x4_perspective(viewprojection[1], 0.78f, aspect, 0.1f, 100.0f);
+    viewprojection[1][1][1] *= -1;
+
+    vkMapMemory(
+        device,
+        staging_buffer->memory,
+        0,
+        uniform_buffer->size,
+        0,
+        &uniform_buffer->mapped
+    );
+    memset(uniform_buffer->mapped, 0, 3*sizeof(mat4x4));
+    ((float*)uniform_buffer->mapped)[16] = 1.f;
+    ((float*)uniform_buffer->mapped)[21] = 1.f;
+    ((float*)uniform_buffer->mapped)[26] = 1.f;
+    ((float*)uniform_buffer->mapped)[31] = 1.f;
+    memcpy(uniform_buffer->mapped, viewprojection, 2*sizeof(mat4x4));
+    vkUnmapMemory(device, staging_buffer->memory);
+}*/
+
+void renderer_update_uniform_buffer(
+        VkDevice device,
+        VkExtent2D swapchain_extent,
+        struct renderer_buffer* uniform_buffer,
+        struct renderer_ubo* ubo)
+{
+    memset(ubo, 0, sizeof(*ubo));
+
+    mat4x4_identity(ubo->model);
+
+    vec3 eye = {2.0f, 2.0f, 2.0f};
+    vec3 center = {0.0f, 0.0f, 0.0f};
+    vec3 up = {0.0f, 0.0f, 1.0f};
+    mat4x4_look_at(ubo->view, eye, center, up);
+
+    float aspect = (float)swapchain_extent.width/swapchain_extent.height;
+
+    mat4x4_perspective(ubo->projection, 0.78f, aspect, 0.1f, 100.0f);
+    ubo->projection[1][1] *= -1;
+
+    vkMapMemory(
+        device,
+        uniform_buffer->memory,
+        0,
+        uniform_buffer->size,
+        0,
+        &uniform_buffer->mapped
+    );
+
+    memcpy((float*)uniform_buffer->mapped + 16 * 0,
+            ubo->model, sizeof(mat4x4));
+    memcpy((float*)uniform_buffer->mapped + 16 * 1,
+            ubo->view, sizeof(mat4x4));
+    memcpy((float*)uniform_buffer->mapped + 16 * 2,
+            ubo->projection, sizeof(mat4x4));
+
+    vkUnmapMemory(device, uniform_buffer->memory);
+}
+
+VkDescriptorSet renderer_get_descriptor_set(
+        VkDevice device,
+        VkDescriptorPool descriptor_pool,
+        VkDescriptorSetLayout* descriptor_layouts,
+        uint32_t descriptor_count,
+        struct renderer_buffer* uniform_buffer)
+        //struct renderer_image* tex_image)
+{
+    VkDescriptorSet descriptor_set_handle;
+    descriptor_set_handle = VK_NULL_HANDLE;
+
+    VkDescriptorSetAllocateInfo descriptor_set_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = NULL,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = descriptor_count,
+        .pSetLayouts = descriptor_layouts
+    };
+
+    VkResult result;
+    result = vkAllocateDescriptorSets(
+        device,
+        &descriptor_set_info,
+        &descriptor_set_handle
+    );
+    assert(result == VK_SUCCESS);
+
+	VkDescriptorBufferInfo buffer_info = {
+        .buffer = uniform_buffer->buffer,
+        .offset = 0,
+        .range = uniform_buffer->size
+    };
+
+	/*VkDescriptorImageInfo image_info = {
+        .sampler = tex_image->sampler,
+        .imageView = tex_image->image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };*/
+
+    VkWriteDescriptorSet ubo_descriptor_write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = NULL,
+        .dstSet = descriptor_set_handle,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pImageInfo = NULL,
+        .pBufferInfo = &buffer_info,
+        .pTexelBufferView = NULL
+    };
+
+    /*VkWriteDescriptorSet sampler_descriptor_write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = NULL,
+        .dstSet = descriptor_set_handle,
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &image_info,
+        .pBufferInfo = NULL,
+        .pTexelBufferView = NULL
+    };*/
+
+	VkWriteDescriptorSet descriptor_writes[] = {
+        ubo_descriptor_write
+        //sampler_descriptor_write
+    };
+
+    //vkUpdateDescriptorSets(device, 2, descriptor_writes, 0, NULL);
+    vkUpdateDescriptorSets(device, 1, descriptor_writes, 0, NULL);
+
+    return descriptor_set_handle;
+}
+
 VkPipelineLayout renderer_get_pipeline_layout(
         VkDevice device,
         VkDescriptorSetLayout* descriptor_layouts,
@@ -1291,7 +1569,6 @@ VkPipeline renderer_get_graphics_pipeline(
     };
     uint32_t shader_stage_count = 2;
 
-
     VkPipelineShaderStageCreateInfo* shader_infos;
     shader_infos = malloc(shader_stage_count * sizeof(*shader_infos));
 
@@ -1395,7 +1672,7 @@ VkPipeline renderer_get_graphics_pipeline(
         .rasterizerDiscardEnable = VK_FALSE,
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = VK_CULL_MODE_BACK_BIT,
-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .depthBiasEnable = VK_FALSE,
         .depthBiasConstantFactor = 0.0f,
         .depthBiasClamp = 0.0f,
@@ -1589,6 +1866,7 @@ struct renderer_buffer renderer_get_buffer(
         VkMemoryPropertyFlags memory_flags)
 {
     struct renderer_buffer buffer;
+    buffer.size = size;
 
     VkBufferCreateInfo buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -1855,7 +2133,9 @@ void renderer_record_draw_commands(
         uint32_t swapchain_image_count,
         struct renderer_buffer vbo,
         struct renderer_buffer ibo,
-		uint32_t index_count)
+		uint32_t index_count,
+        VkPipelineLayout pipeline_layout,
+        VkDescriptorSet* descriptor_sets)
         //struct renderer_mesh* mesh)
 {
     VkCommandBufferBeginInfo cmd_begin_info = {
@@ -1933,16 +2213,17 @@ void renderer_record_draw_commands(
             VK_INDEX_TYPE_UINT32
         );
 
-        /*vkCmdBindDescriptorSets(
+        vkCmdBindDescriptorSets(
             swapchain_buffers[i].cmd,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout,
             0,
             1,
-            &mesh->descriptor_set,
+            descriptor_sets,
+            //&mesh->descriptor_set,
             0,
             NULL
-        );*/
+        );
 
         vkCmdDrawIndexed(
             swapchain_buffers[i].cmd,
@@ -2130,8 +2411,8 @@ void renderer_resize(
 
     resources->pipeline_layout = renderer_get_pipeline_layout(
         resources->device,
-        NULL,
-        0,
+        &resources->descriptor_layout,
+        1,
         NULL,
         0
     );
@@ -2162,7 +2443,9 @@ void renderer_resize(
         resources->imageCount,
         resources->vbo,
         resources->ibo,
-        resources->index_count
+        resources->index_count,
+        resources->pipeline_layout,
+        &resources->descriptor_set
     );
 }
 
@@ -2198,6 +2481,21 @@ void renderer_destroy_resources(
     );
 
     vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
+
+    vkFreeMemory(resources->device, resources->uniform_buffer.memory, NULL);
+    vkDestroyBuffer(resources->device, resources->uniform_buffer.buffer, NULL);
+
+    vkDestroyDescriptorSetLayout(
+        resources->device,
+        resources->descriptor_layout,
+        NULL
+    );
+
+    vkDestroyDescriptorPool(
+        resources->device,
+        resources->descriptor_pool,
+        NULL
+    );
 
     for (uint32_t i = 0; i < resources->imageCount; i++) {
         vkDestroyImageView(

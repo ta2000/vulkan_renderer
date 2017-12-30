@@ -4,6 +4,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "linmath.h"
+
 #include <stdbool.h>
 
 #define VALIDATION_ENABLED 1
@@ -20,12 +22,20 @@
 // - Pool for queues?
 // - Fix images being malloc'd every time create_swapchain_buffers called
 // - Device features
-// -
+// - Save aspect ratio everytime window is resized ( instead of every time uniform buffer
+// updated)
 
 struct renderer_vertex
 {
     float x, y;
     float r, b, g;
+};
+
+struct renderer_ubo
+{
+    mat4x4 model;
+    mat4x4 view;
+    mat4x4 projection;
 };
 
 struct renderer_buffer
@@ -73,14 +83,20 @@ struct renderer_resources
     VkSurfaceFormatKHR swapchain_image_format;
     VkExtent2D swapchain_extent;
 
+    VkCommandPool command_pool;
+
     VkRenderPass render_pass;
+
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSetLayout descriptor_layout;
+    VkDescriptorSet descriptor_set;
+    struct renderer_buffer uniform_buffer;
+    struct renderer_ubo ubo;
 
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
 
     VkFramebuffer* framebuffers;
-
-    VkCommandPool command_pool;
 
     struct renderer_buffer vbo;
     struct renderer_buffer ibo;
@@ -187,6 +203,29 @@ VkRenderPass renderer_get_render_pass(
 	//VkFormat depth_format
 );
 
+VkDescriptorPool renderer_get_descriptor_pool(
+    VkDevice device
+);
+
+VkDescriptorSetLayout renderer_get_descriptor_layout(
+    VkDevice device
+);
+
+VkDescriptorSet renderer_get_descriptor_set(
+    VkDevice device,
+    VkDescriptorPool descriptor_pool,
+    VkDescriptorSetLayout* descriptor_layouts,
+    uint32_t descriptor_count,
+    struct renderer_buffer* uniform_buffer
+);
+
+void renderer_update_uniform_buffer(
+    VkDevice device,
+    VkExtent2D swapchain_extent,
+    struct renderer_buffer* uniform_buffer,
+    struct renderer_ubo* ubo
+);
+
 VkPipelineLayout renderer_get_pipeline_layout(
     VkDevice device,
     VkDescriptorSetLayout* descriptor_layouts,
@@ -277,7 +316,9 @@ void renderer_record_draw_commands(
     uint32_t swapchain_image_count,
     struct renderer_buffer vertex_buffer,
     struct renderer_buffer index_buffer,
-    uint32_t index_count
+    uint32_t index_count,
+    VkPipelineLayout pipeline_layout,
+    VkDescriptorSet* descriptor_set
     //struct renderer_mesh* mesh
 );
 
