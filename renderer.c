@@ -91,7 +91,7 @@ void renderer_initialize_resources(
         VK_NULL_HANDLE
     );
 
-    resources->imageCount = renderer_get_swapchain_image_count(
+    resources->image_count = renderer_get_swapchain_image_count(
         resources->device,
         resources->swapchain
     );
@@ -102,7 +102,7 @@ void renderer_initialize_resources(
     );
 
     resources->swapchain_buffers = malloc(
-        resources->imageCount * sizeof(*resources->swapchain_buffers)
+        resources->image_count * sizeof(*resources->swapchain_buffers)
     );
     renderer_create_swapchain_buffers(
         resources->device,
@@ -110,7 +110,7 @@ void renderer_initialize_resources(
         resources->swapchain,
         resources->swapchain_image_format,
         resources->swapchain_buffers,
-        resources->imageCount
+        resources->image_count
     );
 
     resources->descriptor_pool = renderer_get_descriptor_pool(
@@ -167,14 +167,14 @@ void renderer_initialize_resources(
     );
 
     resources->framebuffers = malloc(
-        sizeof(*resources->framebuffers) * resources->imageCount);
+        sizeof(*resources->framebuffers) * resources->image_count);
 	renderer_create_framebuffers(
 		resources->device,
         resources->render_pass,
         resources->swapchain_extent,
         resources->swapchain_buffers,
         resources->framebuffers,
-        resources->imageCount
+        resources->image_count
     );
 
 	struct renderer_vertex vertices[] = {
@@ -209,7 +209,7 @@ void renderer_initialize_resources(
         resources->swapchain_extent,
         resources->framebuffers,
         resources->swapchain_buffers,
-        resources->imageCount,
+        resources->image_count,
         resources->vbo,
         resources->ibo,
         resources->index_count,
@@ -217,8 +217,8 @@ void renderer_initialize_resources(
         &resources->descriptor_set
     );
 
-	resources->imageAvailable = renderer_get_semaphore(resources->device);
-	resources->renderFinished = renderer_get_semaphore(resources->device);
+	resources->image_available = renderer_get_semaphore(resources->device);
+	resources->render_finished = renderer_get_semaphore(resources->device);
 }
 
 VkInstance renderer_get_instance()
@@ -1029,7 +1029,7 @@ void renderer_create_swapchain_buffers(
         VkCommandPool command_pool,
         VkSwapchainKHR swapchain,
         VkSurfaceFormatKHR swapchain_image_format,
-        struct swapchain_buffer* swapchain_buffers,
+        struct renderer_swapchain_buffer* swapchain_buffers,
         uint32_t swapchain_image_count)
 {
     VkImage* images;
@@ -1276,44 +1276,6 @@ VkDescriptorSetLayout renderer_get_descriptor_layout(
 
 	return descriptor_layout_handle;
 }
-
-/*void renderer_update_uniform_buffer(
-        VkPhysicalDevice physical_device,
-        VkDevice device,
-        VkQueue queue,
-        VkCommandPool command_pool,
-        VkExtent2D swapchain_extent,
-        struct renderer_buffer* uniform_buffer)
-{
-    mat4x4 viewprojection[2];
-    memset(viewprojection, 0, sizeof(viewprojection));
-
-    vec3 eye = {12.0f, 12.0f, 12.0f};
-    vec3 center = {0.0f, 0.0f, 0.0f};
-    vec3 up = {0.0f, 0.0f, 1.0f};
-    mat4x4_look_at(viewprojection[0], eye, center, up);
-
-    float aspect = (float)swapchain_extent.width/swapchain_extent.height;
-
-    mat4x4_perspective(viewprojection[1], 0.78f, aspect, 0.1f, 100.0f);
-    viewprojection[1][1][1] *= -1;
-
-    vkMapMemory(
-        device,
-        staging_buffer->memory,
-        0,
-        uniform_buffer->size,
-        0,
-        &uniform_buffer->mapped
-    );
-    memset(uniform_buffer->mapped, 0, 3*sizeof(mat4x4));
-    ((float*)uniform_buffer->mapped)[16] = 1.f;
-    ((float*)uniform_buffer->mapped)[21] = 1.f;
-    ((float*)uniform_buffer->mapped)[26] = 1.f;
-    ((float*)uniform_buffer->mapped)[31] = 1.f;
-    memcpy(uniform_buffer->mapped, viewprojection, 2*sizeof(mat4x4));
-    vkUnmapMemory(device, staging_buffer->memory);
-}*/
 
 void renderer_update_uniform_buffer(
         VkDevice device,
@@ -1796,7 +1758,7 @@ void renderer_create_framebuffers(
         VkDevice device,
         VkRenderPass render_pass,
         VkExtent2D swapchain_extent,
-        struct swapchain_buffer* swapchain_buffers,
+        struct renderer_swapchain_buffer* swapchain_buffers,
         //VkImageView depth_image_view,
         VkFramebuffer* framebuffers,
         uint32_t swapchain_image_count)
@@ -2129,7 +2091,7 @@ void renderer_record_draw_commands(
         VkRenderPass render_pass,
         VkExtent2D swapchain_extent,
         VkFramebuffer* framebuffers,
-        struct swapchain_buffer* swapchain_buffers,
+        struct renderer_swapchain_buffer* swapchain_buffers,
         uint32_t swapchain_image_count,
         struct renderer_buffer vbo,
         struct renderer_buffer ibo,
@@ -2268,43 +2230,42 @@ VkSemaphore renderer_get_semaphore(
 
 void drawFrame(struct renderer_resources* resources)
 {
-    uint32_t imageIndex;
+    uint32_t image_index;
 
     VkResult result;
     result = vkAcquireNextImageKHR(
         resources->device,
         resources->swapchain,
         UINT64_MAX, // Wait for next image indefinitely (ns)
-        resources->imageAvailable,
+        resources->image_available,
         VK_NULL_HANDLE,
-        &imageIndex
+        &image_index
     );
     assert(result == VK_SUCCESS);
 
-    VkSubmitInfo submitInfo;
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = NULL;
+    VkSemaphore wait_semaphores[] = {resources->image_available};
+    VkSemaphore signal_semaphores[] = {resources->render_finished};
 
-    VkSemaphore waitSemaphores[] = { resources->imageAvailable };
-    VkPipelineStageFlags waitStages[] = {
+    VkPipelineStageFlags wait_stages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
     };
 
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &resources->swapchain_buffers[imageIndex].cmd;
-
-    VkSemaphore signalSemaphores[] = { resources->renderFinished };
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = NULL,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = wait_semaphores,
+        .pWaitDstStageMask = wait_stages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &resources->swapchain_buffers[image_index].cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = signal_semaphores
+    };
 
     result = vkQueueSubmit(
         resources->graphics_queue,
         1,
-        &submitInfo,
+        &submit_info,
         VK_NULL_HANDLE
     );
     if (result != VK_SUCCESS) {
@@ -2312,20 +2273,20 @@ void drawFrame(struct renderer_resources* resources)
         exit(-1);
     }
 
-    VkPresentInfoKHR presentInfo;
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.pNext = NULL;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
+    VkSwapchainKHR swapchains[] = {resources->swapchain};
 
-    VkSwapchainKHR swapchains[] = { resources->swapchain };
+    VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = NULL,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = signal_semaphores,
+        .swapchainCount = 1,
+        .pSwapchains = swapchains,
+        .pImageIndices = &image_index,
+        .pResults = NULL
+    };
 
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapchains;
-    presentInfo.pImageIndices = &imageIndex;
-    presentInfo.pResults = NULL;
-
-    vkQueuePresentKHR(resources->present_queue, &presentInfo);
+    vkQueuePresentKHR(resources->present_queue, &present_info);
 
     vkDeviceWaitIdle(resources->device);
 }
@@ -2338,7 +2299,7 @@ void renderer_resize(
 
     vkDeviceWaitIdle(resources->device);
 
-    for (uint32_t i = 0; i < resources->imageCount; i++) {
+    for (uint32_t i = 0; i < resources->image_count; i++) {
         vkDestroyFramebuffer(
             resources->device,
             resources->framebuffers[i],
@@ -2360,7 +2321,7 @@ void renderer_resize(
 
     vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
 
-    for (uint32_t i = 0; i < resources->imageCount; i++) {
+    for (uint32_t i = 0; i < resources->image_count; i++) {
         vkDestroyImageView(
             resources->device,
             resources->swapchain_buffers[i].image_view,
@@ -2390,7 +2351,7 @@ void renderer_resize(
         resources->swapchain
     );
 
-    resources->imageCount = renderer_get_swapchain_image_count(
+    resources->image_count = renderer_get_swapchain_image_count(
         resources->device,
         resources->swapchain
     );
@@ -2401,7 +2362,7 @@ void renderer_resize(
         resources->swapchain,
         resources->swapchain_image_format,
         resources->swapchain_buffers,
-        resources->imageCount
+        resources->image_count
     );
 
 	resources->render_pass = renderer_get_render_pass(
@@ -2431,7 +2392,7 @@ void renderer_resize(
         resources->swapchain_extent,
         resources->swapchain_buffers,
         resources->framebuffers,
-        resources->imageCount
+        resources->image_count
     );
 
     renderer_record_draw_commands(
@@ -2440,7 +2401,7 @@ void renderer_resize(
         resources->swapchain_extent,
         resources->framebuffers,
         resources->swapchain_buffers,
-        resources->imageCount,
+        resources->image_count,
         resources->vbo,
         resources->ibo,
         resources->index_count,
@@ -2457,10 +2418,10 @@ void renderer_destroy_resources(
     vkDestroyBuffer(resources->device, resources->ibo.buffer, NULL);
     vkFreeMemory(resources->device, resources->ibo.memory, NULL);
 
-    vkDestroySemaphore(resources->device, resources->imageAvailable, NULL);
-    vkDestroySemaphore(resources->device, resources->renderFinished, NULL);
+    vkDestroySemaphore(resources->device, resources->image_available, NULL);
+    vkDestroySemaphore(resources->device, resources->render_finished, NULL);
 
-    for (uint32_t i = 0; i < resources->imageCount; i++) {
+    for (uint32_t i = 0; i < resources->image_count; i++) {
         vkDestroyFramebuffer(
             resources->device,
             resources->framebuffers[i],
@@ -2497,7 +2458,7 @@ void renderer_destroy_resources(
         NULL
     );
 
-    for (uint32_t i = 0; i < resources->imageCount; i++) {
+    for (uint32_t i = 0; i < resources->image_count; i++) {
         vkDestroyImageView(
             resources->device,
             resources->swapchain_buffers[i].image_view,

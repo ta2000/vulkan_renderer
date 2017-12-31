@@ -46,7 +46,7 @@ struct renderer_buffer
     void* mapped;
 };
 
-struct swapchain_buffer
+struct renderer_swapchain_buffer
 {
     VkImage image;
     VkImageView image_view;
@@ -78,8 +78,8 @@ struct renderer_resources
     VkDevice device;
 
     VkSwapchainKHR swapchain;
-    uint32_t imageCount;
-    struct swapchain_buffer* swapchain_buffers;
+    uint32_t image_count;
+    struct renderer_swapchain_buffer* swapchain_buffers;
     VkSurfaceFormatKHR swapchain_image_format;
     VkExtent2D swapchain_extent;
 
@@ -102,8 +102,8 @@ struct renderer_resources
     struct renderer_buffer ibo;
     uint32_t index_count;
 
-    VkSemaphore imageAvailable;
-    VkSemaphore renderFinished;
+    VkSemaphore image_available;
+    VkSemaphore render_finished;
 };
 
 void renderer_initialize_resources(
@@ -193,7 +193,7 @@ void renderer_create_swapchain_buffers(
     VkCommandPool command_pool,
     VkSwapchainKHR swapchain,
     VkSurfaceFormatKHR swapchain_image_format,
-    struct swapchain_buffer* swapchain_buffers,
+    struct renderer_swapchain_buffer* swapchain_buffers,
     uint32_t swapchain_image_count
 );
 
@@ -262,7 +262,7 @@ void renderer_create_framebuffers(
 	VkDevice device,
 	VkRenderPass render_pass,
 	VkExtent2D swapchain_extent,
-	struct swapchain_buffer* swapchain_buffers,
+	struct renderer_swapchain_buffer* swapchain_buffers,
 	//VkImageView depth_image_view,
 	VkFramebuffer* framebuffers,
 	uint32_t swapchain_image_count
@@ -312,7 +312,7 @@ void renderer_record_draw_commands(
     VkRenderPass render_pass,
     VkExtent2D swapchain_extent,
     VkFramebuffer* framebuffers,
-    struct swapchain_buffer* swapchain_buffers,
+    struct renderer_swapchain_buffer* swapchain_buffers,
     uint32_t swapchain_image_count,
     struct renderer_buffer vertex_buffer,
     struct renderer_buffer index_buffer,
