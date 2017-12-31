@@ -186,8 +186,8 @@ void renderer_initialize_resources(
     resources->vbo = renderer_get_vertex_buffer(
         resources->physical_device,
         resources->device,
-        resources->graphics_queue,
         resources->command_pool,
+        resources->graphics_queue,
         vertices, 4
     );
 
@@ -197,8 +197,8 @@ void renderer_initialize_resources(
     resources->ibo = renderer_get_index_buffer(
         resources->physical_device,
         resources->device,
-        resources->graphics_queue,
         resources->command_pool,
+        resources->graphics_queue,
         indices, 6
     );
     resources->index_count = 6;
@@ -1879,11 +1879,86 @@ struct renderer_buffer renderer_get_buffer(
     return buffer;
 }
 
+void renderer_copy_buffer_to_buffer(
+        VkDevice device,
+        VkCommandPool command_pool,
+        VkQueue queue,
+        VkBuffer src_buffer,
+        VkBuffer dst_buffer,
+        VkDeviceSize mem_size)
+{
+    VkCommandBuffer copy_cmd;
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+    VkResult result;
+    result = vkAllocateCommandBuffers(device, &cmd_alloc_info, &copy_cmd);
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo cmd_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = NULL
+    };
+    result = vkBeginCommandBuffer(copy_cmd, &cmd_begin_info);
+    assert(result == VK_SUCCESS);
+
+    VkBufferCopy region = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = mem_size
+    };
+
+    vkCmdCopyBuffer(
+        copy_cmd,
+        src_buffer,
+        dst_buffer,
+        1,
+        &region
+    );
+
+    vkEndCommandBuffer(copy_cmd);
+
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = NULL,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = NULL,
+        .pWaitDstStageMask = NULL,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &copy_cmd,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = NULL
+    };
+
+    result = vkQueueSubmit(
+        queue,
+        1,
+        &submit_info,
+        VK_NULL_HANDLE
+    );
+    assert(result == VK_SUCCESS);
+
+    vkQueueWaitIdle(queue);
+
+    vkFreeCommandBuffers(
+        device,
+        command_pool,
+        1,
+        &copy_cmd
+    );
+}
+
 struct renderer_buffer renderer_get_vertex_buffer(
         VkPhysicalDevice physical_device,
         VkDevice device,
-        VkQueue queue,
         VkCommandPool command_pool,
+        VkQueue queue,
         struct renderer_vertex* vertices,
         uint32_t vertex_count)
 {
@@ -1914,51 +1989,13 @@ struct renderer_buffer renderer_get_vertex_buffer(
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    VkCommandBuffer copy_cmd;
-    VkCommandBufferAllocateInfo cmd_alloc_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = NULL,
-        .commandPool = command_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-    VkResult result;
-    result = vkAllocateCommandBuffers(device, &cmd_alloc_info, &copy_cmd);
-    assert(result == VK_SUCCESS);
-
-    VkCommandBufferBeginInfo cmd_begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = NULL,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = NULL
-    };
-    result = vkBeginCommandBuffer(copy_cmd, &cmd_begin_info);
-    assert(result == VK_SUCCESS);
-
-    VkBufferCopy region = {
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = mem_size
-    };
-
-    vkCmdCopyBuffer(
-        copy_cmd,
-        staging_vbo.buffer,
-        vbo.buffer,
-        1,
-        &region
-    );
-
-    renderer_submit_command_buffer(
-        queue,
-        &copy_cmd
-    );
-
-    vkFreeCommandBuffers(
+    renderer_copy_buffer_to_buffer(
         device,
         command_pool,
-        1,
-        &copy_cmd
+        queue,
+        staging_vbo.buffer,
+        vbo.buffer,
+        mem_size
     );
 
     vkDestroyBuffer(device, staging_vbo.buffer, NULL);
@@ -1970,8 +2007,8 @@ struct renderer_buffer renderer_get_vertex_buffer(
 struct renderer_buffer renderer_get_index_buffer(
         VkPhysicalDevice physical_device,
         VkDevice device,
-        VkQueue queue,
         VkCommandPool command_pool,
+        VkQueue queue,
         uint32_t* indices,
         uint32_t index_count)
 {
@@ -2002,87 +2039,19 @@ struct renderer_buffer renderer_get_index_buffer(
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
     );
 
-    VkCommandBuffer copy_cmd;
-    VkCommandBufferAllocateInfo cmd_alloc_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = NULL,
-        .commandPool = command_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-    VkResult result;
-    result = vkAllocateCommandBuffers(device, &cmd_alloc_info, &copy_cmd);
-    assert(result == VK_SUCCESS);
-
-    VkCommandBufferBeginInfo cmd_begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = NULL,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = NULL
-    };
-    result = vkBeginCommandBuffer(copy_cmd, &cmd_begin_info);
-    assert(result == VK_SUCCESS);
-
-    VkBufferCopy region = {
-        .srcOffset = 0,
-        .dstOffset = 0,
-        .size = mem_size
-    };
-
-    vkCmdCopyBuffer(
-        copy_cmd,
-        staging_ibo.buffer,
-        ibo.buffer,
-        1,
-        &region
-    );
-
-    renderer_submit_command_buffer(
-        queue,
-        &copy_cmd
-    );
-
-    vkFreeCommandBuffers(
+    renderer_copy_buffer_to_buffer(
         device,
         command_pool,
-        1,
-        &copy_cmd
+        queue,
+        staging_ibo.buffer,
+        ibo.buffer,
+        mem_size
     );
 
     vkDestroyBuffer(device, staging_ibo.buffer, NULL);
     vkFreeMemory(device, staging_ibo.memory, NULL);
 
     return ibo;
-}
-
-void renderer_submit_command_buffer(
-        VkQueue queue,
-        VkCommandBuffer* cmd)
-{
-    vkEndCommandBuffer(*cmd);
-
-    VkSubmitInfo submit_info = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = NULL,
-        .waitSemaphoreCount = 0,
-        .pWaitSemaphores = NULL,
-        .pWaitDstStageMask = NULL,
-        .commandBufferCount = 1,
-        .pCommandBuffers = cmd,
-        .signalSemaphoreCount = 0,
-        .pSignalSemaphores = NULL
-    };
-
-    VkResult result;
-    result = vkQueueSubmit(
-        queue,
-        1,
-        &submit_info,
-        VK_NULL_HANDLE
-    );
-    assert(result == VK_SUCCESS);
-
-    vkQueueWaitIdle(queue);
 }
 
 void renderer_record_draw_commands(

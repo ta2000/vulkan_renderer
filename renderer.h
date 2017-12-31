@@ -283,11 +283,29 @@ struct renderer_buffer renderer_get_buffer(
     VkMemoryPropertyFlags memory_flags
 );
 
+void renderer_copy_buffer_to_buffer(
+    VkDevice device,
+    VkCommandPool command_pool,
+    VkQueue queue,
+    VkBuffer src_buffer,
+    VkBuffer dst_buffer,
+    VkDeviceSize mem_size
+);
+
+void renderer_copy_buffer_to_image(
+    VkDevice device,
+    VkCommandPool command_pool,
+    VkQueue queue,
+    VkBuffer src_buffer,
+    VkImage dst_image,
+    VkDeviceSize mem_size
+);
+
 struct renderer_buffer renderer_get_vertex_buffer(
 	VkPhysicalDevice physical_device,
 	VkDevice device,
-	VkQueue queue,
 	VkCommandPool command_pool,
+	VkQueue queue,
 	struct renderer_vertex* vertices,
 	uint32_t vertex_count
 );
@@ -295,15 +313,10 @@ struct renderer_buffer renderer_get_vertex_buffer(
 struct renderer_buffer renderer_get_index_buffer(
     VkPhysicalDevice physical_device,
     VkDevice device,
-    VkQueue queue,
     VkCommandPool command_pool,
+    VkQueue queue,
     uint32_t* indices,
     uint32_t index_count
-);
-
-void renderer_submit_command_buffer(
-    VkQueue queue,
-    VkCommandBuffer* cmd
 );
 
 void renderer_record_draw_commands(
