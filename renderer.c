@@ -1,5 +1,8 @@
 #include "renderer.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1954,6 +1957,85 @@ void renderer_copy_buffer_to_buffer(
     );
 }
 
+void renderer_copy_buffer_to_image(
+        VkDevice device,
+        VkCommandPool command_pool,
+        VkQueue queue,
+        VkBuffer src_buffer,
+        VkImage dst_image,
+        VkExtent3D extent)
+{
+    VkCommandBuffer copy_cmd;
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+    VkResult result;
+    result = vkAllocateCommandBuffers(device, &cmd_alloc_info, &copy_cmd);
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo cmd_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = NULL
+    };
+    result = vkBeginCommandBuffer(copy_cmd, &cmd_begin_info);
+    assert(result == VK_SUCCESS);
+
+    VkBufferImageCopy region = {
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .imageOffset = {0, 0, 0},
+        .imageExtent = extent
+    };
+
+    vkCmdCopyBufferToImage(
+        copy_cmd,
+        src_buffer,
+        dst_image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1,
+        &region
+    );
+
+    vkEndCommandBuffer(copy_cmd);
+
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = NULL,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = NULL,
+        .pWaitDstStageMask = NULL,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &copy_cmd,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = NULL
+    };
+
+    result = vkQueueSubmit(
+        queue,
+        1,
+        &submit_info,
+        VK_NULL_HANDLE
+    );
+    assert(result == VK_SUCCESS);
+
+    vkQueueWaitIdle(queue);
+
+    vkFreeCommandBuffers(
+        device,
+        command_pool,
+        1,
+        &copy_cmd
+    );
+}
+
 struct renderer_buffer renderer_get_vertex_buffer(
         VkPhysicalDevice physical_device,
         VkDevice device,
@@ -2052,6 +2134,189 @@ struct renderer_buffer renderer_get_index_buffer(
     vkFreeMemory(device, staging_ibo.memory, NULL);
 
     return ibo;
+}
+
+struct renderer_image renderer_get_image(
+        VkPhysicalDevice physical_device,
+        VkDevice device,
+        VkExtent3D extent,
+        VkFormat format,
+        VkImageTiling tiling,
+        VkImageUsageFlags usage,
+        VkMemoryPropertyFlags memory_flags)
+{
+    struct renderer_image image;
+    memset(&image, 0, sizeof(image));
+
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = {extent.width, extent.height, extent.depth},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = tiling,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = NULL,
+        .initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED
+    };
+
+    VkResult result;
+    result = vkCreateImage(device, &image_info, NULL, &image.image);
+    assert(result == VK_SUCCESS);
+
+    VkMemoryRequirements mem_reqs;
+    vkGetImageMemoryRequirements(device, image.image, &mem_reqs);
+
+    VkPhysicalDeviceMemoryProperties mem_props;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_props);
+
+    VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = NULL,
+        .allocationSize = mem_reqs.size,
+        .memoryTypeIndex = renderer_find_memory_type(
+            mem_reqs.memoryTypeBits,
+            memory_flags,
+            mem_props.memoryTypeCount,
+            mem_props.memoryTypes
+        )
+    };
+
+    result = vkAllocateMemory(device, &alloc_info, NULL, &image.memory);
+    assert(result == VK_SUCCESS);
+
+    vkBindImageMemory(device, image.image, image.memory, 0);
+
+    return image;
+}
+
+void renderer_change_image_layout(
+        VkDevice device,
+        VkQueue queue,
+        VkCommandPool command_pool,
+        VkImage image,
+        VkImageLayout old_layout,
+        VkImageLayout new_layout,
+        VkAccessFlagBits src_access_mask,
+        VkImageAspectFlags aspect_mask)
+{
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+
+    VkResult result;
+    result = vkAllocateCommandBuffers(
+        device,
+        &cmd_alloc_info,
+        &cmd
+    );
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferBeginInfo cmd_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .pInheritanceInfo = NULL
+    };
+
+    result = vkBeginCommandBuffer(
+        cmd,
+        &cmd_begin_info
+    );
+    assert(result == VK_SUCCESS);
+
+    VkImageMemoryBarrier memory_barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = NULL,
+        .srcAccessMask = src_access_mask,
+        .dstAccessMask = 0,
+        .oldLayout = old_layout,
+        .newLayout = new_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = {
+            aspect_mask,
+            0,
+            1,
+            0,
+            1
+        }
+    };
+
+    if (new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+
+    if (new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        memory_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        memory_barrier.dstAccessMask =
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+
+    if (new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        memory_barrier.dstAccessMask =
+            VK_ACCESS_SHADER_READ_BIT |
+            VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    }
+
+    vkCmdPipelineBarrier(
+        cmd,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        0,
+        0,
+        NULL,
+        0,
+        NULL,
+        1,
+        &memory_barrier
+    );
+
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = NULL,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = NULL,
+        .pWaitDstStageMask = NULL,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = NULL
+    };
+
+    result = vkQueueSubmit(
+        queue,
+        1,
+        &submit_info,
+        VK_NULL_HANDLE
+    );
+    assert(result == VK_SUCCESS);
+
+    vkQueueWaitIdle(queue);
+
+    vkFreeCommandBuffers(
+        device,
+        command_pool,
+        1,
+        &cmd
+    );
 }
 
 void renderer_record_draw_commands(

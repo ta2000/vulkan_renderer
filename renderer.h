@@ -24,6 +24,7 @@
 // - Device features
 // - Save aspect ratio everytime window is resized ( instead of every time uniform buffer
 // updated)
+// - Move image/buffer stuff to seperate files?
 
 struct renderer_vertex
 {
@@ -43,6 +44,17 @@ struct renderer_buffer
     VkBuffer buffer;
     VkDeviceMemory memory;
     VkDeviceSize size;
+    void* mapped;
+};
+
+struct renderer_image
+{
+    VkImage image;
+    VkImageView image_view;
+    VkDeviceMemory memory;
+    VkDeviceSize size;
+    VkSampler sampler;
+    uint32_t width, height;
     void* mapped;
 };
 
@@ -298,7 +310,7 @@ void renderer_copy_buffer_to_image(
     VkQueue queue,
     VkBuffer src_buffer,
     VkImage dst_image,
-    VkDeviceSize mem_size
+    VkExtent3D extent
 );
 
 struct renderer_buffer renderer_get_vertex_buffer(
@@ -317,6 +329,27 @@ struct renderer_buffer renderer_get_index_buffer(
     VkQueue queue,
     uint32_t* indices,
     uint32_t index_count
+);
+
+struct renderer_image renderer_get_image(
+    VkPhysicalDevice physical_device,
+    VkDevice device,
+    VkExtent3D extent,
+    VkFormat format,
+    VkImageTiling tiling,
+    VkImageUsageFlags usage,
+    VkMemoryPropertyFlags memory_flags
+);
+
+void renderer_change_image_layout(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool command_pool,
+    VkImage image,
+    VkImageLayout old_layout,
+    VkImageLayout new_layout,
+    VkAccessFlagBits src_access_mask,
+    VkImageAspectFlags aspect_mask
 );
 
 void renderer_record_draw_commands(
