@@ -29,7 +29,7 @@
 struct renderer_vertex
 {
     float x, y;
-    float r, b, g;
+    float u, v;
 };
 
 struct renderer_ubo
@@ -113,6 +113,8 @@ struct renderer_resources
     struct renderer_buffer vbo;
     struct renderer_buffer ibo;
     uint32_t index_count;
+
+    struct renderer_image tex_image;
 
     VkSemaphore image_available;
     VkSemaphore render_finished;
@@ -228,7 +230,8 @@ VkDescriptorSet renderer_get_descriptor_set(
     VkDescriptorPool descriptor_pool,
     VkDescriptorSetLayout* descriptor_layouts,
     uint32_t descriptor_count,
-    struct renderer_buffer* uniform_buffer
+    struct renderer_buffer* uniform_buffer,
+    struct renderer_image* tex_image
 );
 
 void renderer_update_uniform_buffer(
@@ -350,6 +353,14 @@ void renderer_change_image_layout(
     VkImageLayout new_layout,
     VkAccessFlagBits src_access_mask,
     VkImageAspectFlags aspect_mask
+);
+
+struct renderer_image renderer_load_texture(
+    const char* src,
+    VkPhysicalDevice physical_device,
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool command_pool
 );
 
 void renderer_record_draw_commands(
