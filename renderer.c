@@ -116,6 +116,12 @@ void renderer_initialize_resources(
         resources->image_count
     );
 
+    resources->depth_format = renderer_get_depth_format(
+        resources->physical_device,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+    );
+
     resources->descriptor_pool = renderer_get_descriptor_pool(
         resources->device
     );
@@ -1105,6 +1111,44 @@ void renderer_create_swapchain_buffers(
         );
         assert(result == VK_SUCCESS);
     }
+}
+
+VkFormat renderer_get_depth_format(
+        VkPhysicalDevice physical_device,
+        VkImageTiling tiling,
+        VkFormatFeatureFlags features)
+{
+    VkFormat format = VK_FORMAT_UNDEFINED;
+
+    VkFormat formats[] = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D24_UNORM_S8_UINT
+    };
+    uint32_t format_count = sizeof(formats)/sizeof(formats[0]);
+
+    uint32_t i;
+    for (i=0; i<format_count; i++)
+    {
+        VkFormatProperties properties;
+        vkGetPhysicalDeviceFormatProperties(
+            physical_device,
+            formats[i],
+            &properties
+        );
+
+        if ( (tiling == VK_IMAGE_TILING_LINEAR &&
+             (properties.linearTilingFeatures & features) == features)
+                ||
+             (tiling == VK_IMAGE_TILING_OPTIMAL &&
+             (properties.optimalTilingFeatures & features) == features) )
+        {
+            format = formats[i];
+            break;
+        }
+    }
+
+    return format;
 }
 
 VkRenderPass renderer_get_render_pass(
@@ -2593,8 +2637,6 @@ void renderer_record_draw_commands(
             0,
             0
         );
-
-        /*vkCmdDraw(swapchain_buffers[i].cmd, 3, 1, 0, 0);*/
 
         vkCmdEndRenderPass(swapchain_buffers[i].cmd);
 

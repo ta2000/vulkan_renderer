@@ -95,15 +95,17 @@ struct renderer_resources
     VkSurfaceFormatKHR swapchain_image_format;
     VkExtent2D swapchain_extent;
 
-    VkCommandPool command_pool;
+    VkFormat depth_format;
 
-    VkRenderPass render_pass;
+    VkCommandPool command_pool;
 
     VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_layout;
     VkDescriptorSet descriptor_set;
     struct renderer_buffer uniform_buffer;
     struct renderer_ubo ubo;
+
+    VkRenderPass render_pass;
 
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
@@ -209,6 +211,12 @@ void renderer_create_swapchain_buffers(
     VkSurfaceFormatKHR swapchain_image_format,
     struct renderer_swapchain_buffer* swapchain_buffers,
     uint32_t swapchain_image_count
+);
+
+VkFormat renderer_get_depth_format(
+    VkPhysicalDevice physical_device,
+    VkImageTiling tiling,
+    VkFormatFeatureFlags features
 );
 
 VkRenderPass renderer_get_render_pass(
