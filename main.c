@@ -1,3 +1,6 @@
+#include "renderer_buffer.h"
+#include "renderer_image.h"
+#include "renderer_tools.h"
 #include "renderer.h"
 
 #include <stdlib.h>

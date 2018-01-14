@@ -39,25 +39,6 @@ struct renderer_ubo
     mat4x4 projection;
 };
 
-struct renderer_buffer
-{
-    VkBuffer buffer;
-    VkDeviceMemory memory;
-    VkDeviceSize size;
-    void* mapped;
-};
-
-struct renderer_image
-{
-    VkImage image;
-    VkImageView image_view;
-    VkDeviceMemory memory;
-    VkDeviceSize size;
-    VkSampler sampler;
-    uint32_t width, height;
-    void* mapped;
-};
-
 struct renderer_swapchain_buffer
 {
     VkImage image;
@@ -258,16 +239,6 @@ VkPipelineLayout renderer_get_pipeline_layout(
     uint32_t push_constant_range_count
 );
 
-size_t renderer_get_file_size(
-    const char* fname
-);
-
-void renderer_read_file_to_buffer(
-    const char* fname,
-    char** buffer,
-    size_t buffer_size
-);
-
 VkShaderModule renderer_get_shader_module(
     VkDevice device,
     char* code,
@@ -292,39 +263,6 @@ void renderer_create_framebuffers(
 	uint32_t swapchain_image_count
 );
 
-uint32_t renderer_find_memory_type(
-	uint32_t memory_type_bits,
-	VkMemoryPropertyFlags properties,
-	uint32_t memory_type_count,
-	VkMemoryType* memory_types
-);
-
-struct renderer_buffer renderer_get_buffer(
-    VkPhysicalDevice physical_device,
-    VkDevice device,
-    VkDeviceSize size,
-    VkBufferUsageFlags usage,
-    VkMemoryPropertyFlags memory_flags
-);
-
-void renderer_copy_buffer_to_buffer(
-    VkDevice device,
-    VkCommandPool command_pool,
-    VkQueue queue,
-    VkBuffer src_buffer,
-    VkBuffer dst_buffer,
-    VkDeviceSize mem_size
-);
-
-void renderer_copy_buffer_to_image(
-    VkDevice device,
-    VkCommandPool command_pool,
-    VkQueue queue,
-    VkBuffer src_buffer,
-    VkImage dst_image,
-    VkExtent3D extent
-);
-
 struct renderer_buffer renderer_get_vertex_buffer(
 	VkPhysicalDevice physical_device,
 	VkDevice device,
@@ -341,35 +279,6 @@ struct renderer_buffer renderer_get_index_buffer(
     VkQueue queue,
     uint32_t* indices,
     uint32_t index_count
-);
-
-struct renderer_image renderer_get_image(
-    VkPhysicalDevice physical_device,
-    VkDevice device,
-    VkExtent3D extent,
-    VkFormat format,
-    VkImageTiling tiling,
-    VkImageUsageFlags usage,
-    VkMemoryPropertyFlags memory_flags
-);
-
-void renderer_change_image_layout(
-    VkDevice device,
-    VkQueue queue,
-    VkCommandPool command_pool,
-    VkImage image,
-    VkImageLayout old_layout,
-    VkImageLayout new_layout,
-    VkAccessFlagBits src_access_mask,
-    VkImageAspectFlags aspect_mask
-);
-
-struct renderer_image renderer_load_texture(
-    const char* src,
-    VkPhysicalDevice physical_device,
-    VkDevice device,
-    VkQueue queue,
-    VkCommandPool command_pool
 );
 
 void renderer_record_draw_commands(
