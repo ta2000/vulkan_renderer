@@ -122,6 +122,16 @@ void renderer_initialize_resources(
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
     );
 
+    /*resources->depth_image = renderer_get_image(
+        resources->physical_device,
+        resources->device,
+        resources->swapchain_extent,
+        resources->depth_format,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );*/
+
     resources->descriptor_pool = renderer_get_descriptor_pool(
         resources->device
     );
@@ -196,30 +206,36 @@ void renderer_initialize_resources(
     );
 
 	struct renderer_vertex vertices[] = {
-        {.x=-0.5f, .y=-0.5f, .u=1.0f, .v=0.0f},
-        {.x=0.5f, .y=-0.5f, .u=0.0f, .v=0.0f},
-        {.x=0.5f, .y=0.5f, .u=0.0f, .v=1.0f},
-        {.x=-0.5f, .y=0.5f, .u=1.0f, .v=1.0f}
+        {.x=-0.5f,  .y=-0.5f,   .z=0.0f,    .u=1.0f,    .v=0.0f},
+        {.x=0.5f,   .y=-0.5f,   .z=0.0f,    .u=0.0f,    .v=0.0f},
+        {.x=0.5f,   .y=0.5f,    .z=0.0f,    .u=0.0f,    .v=1.0f},
+        {.x=-0.5f,  .y=0.5f,    .z=0.0f,    .u=1.0f,    .v=1.0f},
+
+        {.x=-0.5f,  .y=-0.5f,   .z=-.5f,    .u=1.0f,    .v=0.0f},
+        {.x=0.5f,   .y=-0.5f,   .z=-.5f,    .u=0.0f,    .v=0.0f},
+        {.x=0.5f,   .y=0.5f,    .z=-.5f,    .u=0.0f,    .v=1.0f},
+        {.x=-0.5f,  .y=0.5f,    .z=-.5f,    .u=1.0f,    .v=1.0f}
     };
     resources->vbo = renderer_get_vertex_buffer(
         resources->physical_device,
         resources->device,
         resources->command_pool,
         resources->graphics_queue,
-        vertices, 4
+        vertices, 8
     );
 
 	uint32_t indices[] = {
-        0, 1, 2, 2, 3, 0
+        0, 1, 2, 2, 3, 0,
+        4, 5, 6, 6, 7, 4
     };
     resources->ibo = renderer_get_index_buffer(
         resources->physical_device,
         resources->device,
         resources->command_pool,
         resources->graphics_queue,
-        indices, 6
+        indices, 12
     );
-    resources->index_count = 6;
+    resources->index_count = 12;
 
     renderer_record_draw_commands(
         resources->graphics_pipeline,
@@ -1611,16 +1627,9 @@ VkPipeline renderer_get_graphics_pipeline(
     VkVertexInputAttributeDescription position_attribute_description = {
         .location = 0,
         .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = offsetof(struct renderer_vertex, x)
-    };
-
-    /*VkVertexInputAttributeDescription position_attribute_description = {
-        .location = 0,
-        .binding = 0,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
         .offset = offsetof(struct renderer_vertex, x)
-    };*/
+    };
 
     VkVertexInputAttributeDescription texture_attribute_description = {
         .location = 1,
@@ -2452,6 +2461,7 @@ struct renderer_image renderer_load_texture(
         &tex_channels,
         STBI_rgb_alpha
     );
+    printf("%d\n", tex_channels);
     assert(pixels && tex_width && tex_height);
 
     VkExtent3D extent = {.width = tex_width, .height = tex_height, .depth = 1};

@@ -28,7 +28,7 @@
 
 struct renderer_vertex
 {
-    float x, y;
+    float x, y, z;
     float u, v;
 };
 
@@ -96,6 +96,7 @@ struct renderer_resources
     VkExtent2D swapchain_extent;
 
     VkFormat depth_format;
+    struct renderer_image depth_image;
 
     VkCommandPool command_pool;
 
