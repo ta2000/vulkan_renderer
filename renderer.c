@@ -122,7 +122,7 @@ void renderer_initialize_resources(
         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
     );
 
-    /*resources->depth_image = renderer_get_image(
+    resources->depth_image = renderer_get_image(
         resources->physical_device,
         resources->device,
         resources->swapchain_extent,
@@ -131,7 +131,15 @@ void renderer_initialize_resources(
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-    );*/
+    );
+
+    renderer_set_depth_image_layout(
+        resources->device,
+        resources->graphics_queue,
+        resources->command_pool,
+        resources->depth_image.image,
+        resources->depth_format
+    );
 
     resources->descriptor_pool = renderer_get_descriptor_pool(
         resources->device
@@ -176,7 +184,8 @@ void renderer_initialize_resources(
 
 	resources->render_pass = renderer_get_render_pass(
 		resources->device,
-		resources->swapchain_image_format.format
+		resources->swapchain_image_format.format,
+        resources->depth_format
 	);
 
     resources->pipeline_layout = renderer_get_pipeline_layout(
@@ -202,6 +211,7 @@ void renderer_initialize_resources(
         resources->render_pass,
         resources->swapchain_extent,
         resources->swapchain_buffers,
+        resources->depth_image.image_view,
         resources->framebuffers,
         resources->image_count
     );
@@ -1168,95 +1178,29 @@ VkFormat renderer_get_depth_format(
     return format;
 }
 
-VkRenderPass renderer_get_render_pass(
+void renderer_set_depth_image_layout(
         VkDevice device,
-        VkFormat image_format)
-        //VkFormat depth_format)
+        VkQueue graphics_queue,
+        VkCommandPool command_pool,
+        VkImage depth_image,
+        VkFormat depth_format)
 {
-    VkRenderPass render_pass_handle;
-    render_pass_handle = VK_NULL_HANDLE;
+    VkImageAspectFlags aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+            depth_format == VK_FORMAT_D24_UNORM_S8_UINT) {
+        aspect_mask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
 
-    VkAttachmentDescription color_desc = {
-        .flags = 0,
-        .format = image_format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    };
-    VkAttachmentReference color_ref = {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    /*VkAttachmentDescription depth_desc = {
-        .flags = 0,
-        .format = depth_format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-    VkAttachmentReference depth_ref = {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };*/
-
-    VkAttachmentDescription attachments[] = {color_desc/*, depth_desc*/};
-
-    VkSubpassDescription subpass = {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .flags = 0,
-        .inputAttachmentCount = 0,
-        .pInputAttachments = NULL,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_ref,
-        .pResolveAttachments = NULL,
-        .pDepthStencilAttachment = NULL, //&depth_ref,
-        .preserveAttachmentCount = 0,
-        .pPreserveAttachments = NULL
-    };
-
-    VkSubpassDependency subpass_dependency = {
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .srcAccessMask = 0,
-        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .dstAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .dependencyFlags = 0
-    };
-
-    VkRenderPassCreateInfo render_pass_info = {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .pNext = NULL,
-        .flags = 0,
-        .attachmentCount = 1, //2,
-        .pAttachments = attachments,
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-        .dependencyCount = 1,
-        .pDependencies = &subpass_dependency
-    };
-
-    VkResult result;
-    result = vkCreateRenderPass(
+    renderer_change_image_layout(
         device,
-        &render_pass_info,
-        NULL,
-        &render_pass_handle
+        graphics_queue,
+        command_pool,
+        depth_image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        0,
+        aspect_mask
     );
-    assert(result == VK_SUCCESS);
-
-    return render_pass_handle;
 }
 
 VkDescriptorPool renderer_get_descriptor_pool(
@@ -1464,6 +1408,97 @@ VkDescriptorSet renderer_get_descriptor_set(
     vkUpdateDescriptorSets(device, 2, descriptor_writes, 0, NULL);
 
     return descriptor_set_handle;
+}
+
+VkRenderPass renderer_get_render_pass(
+        VkDevice device,
+        VkFormat image_format,
+        VkFormat depth_format)
+{
+    VkRenderPass render_pass_handle;
+    render_pass_handle = VK_NULL_HANDLE;
+
+    VkAttachmentDescription color_desc = {
+        .flags = 0,
+        .format = image_format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+    VkAttachmentReference color_ref = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentDescription depth_desc = {
+        .flags = 0,
+        .format = depth_format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference depth_ref = {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentDescription attachments[] = {color_desc, depth_desc};
+
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .flags = 0,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_ref,
+        .pResolveAttachments = NULL,
+        .pDepthStencilAttachment = &depth_ref,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = NULL
+    };
+
+    VkSubpassDependency subpass_dependency = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0
+    };
+
+    VkRenderPassCreateInfo render_pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .attachmentCount = 2,
+        .pAttachments = attachments,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &subpass_dependency
+    };
+
+    VkResult result;
+    result = vkCreateRenderPass(
+        device,
+        &render_pass_info,
+        NULL,
+        &render_pass_handle
+    );
+    assert(result == VK_SUCCESS);
+
+    return render_pass_handle;
 }
 
 VkPipelineLayout renderer_get_pipeline_layout(
@@ -1786,21 +1821,19 @@ void renderer_create_framebuffers(
         VkRenderPass render_pass,
         VkExtent2D swapchain_extent,
         struct renderer_swapchain_buffer* swapchain_buffers,
-        //VkImageView depth_image_view,
+        VkImageView depth_image_view,
         VkFramebuffer* framebuffers,
         uint32_t swapchain_image_count)
 {
-    VkImageView attachments[1];
-    //VkImageView attachments[2];
-    //attachments[1] = depth_image_view;
+    VkImageView attachments[2];
+    attachments[1] = depth_image_view;
 
     VkFramebufferCreateInfo framebuffer_info = {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .pNext = NULL,
         .flags = 0,
         .renderPass = render_pass,
-        //.attachmentCount = 2,
-        .attachmentCount = 1,
+        .attachmentCount = 2,
         .pAttachments = attachments,
         .width = swapchain_extent.width,
         .height = swapchain_extent.height,
@@ -1943,8 +1976,9 @@ void renderer_record_draw_commands(
         .pInheritanceInfo = NULL
     };
 
-    VkClearValue clear_value = {
-        .color.float32 = {0.0f, 0.0f, 0.0f, 1.0f}
+    VkClearValue clear_values[] = {
+        {.color.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
+        {.depthStencil = {1.0f, 0}}
     };
 
     VkRenderPassBeginInfo render_pass_info = {
@@ -1954,7 +1988,7 @@ void renderer_record_draw_commands(
         .renderArea.offset = {0,0},
         .renderArea.extent = {swapchain_extent.width, swapchain_extent.height},
         .clearValueCount = 2,
-        .pClearValues = &clear_value,
+        .pClearValues = clear_values,
     };
 
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
@@ -2155,6 +2189,14 @@ void renderer_resize(
 
     vkDestroyRenderPass(resources->device, resources->render_pass, NULL);
 
+    vkDestroyImage(resources->device, resources->depth_image.image, NULL);
+    vkDestroyImageView(
+        resources->device,
+        resources->depth_image.image_view,
+        NULL
+    );
+    vkFreeMemory(resources->device, resources->depth_image.memory, NULL);
+
     for (uint32_t i = 0; i < resources->image_count; i++) {
         vkDestroyImageView(
             resources->device,
@@ -2199,9 +2241,29 @@ void renderer_resize(
         resources->image_count
     );
 
+    resources->depth_image = renderer_get_image(
+        resources->physical_device,
+        resources->device,
+        resources->swapchain_extent,
+        resources->depth_format,
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+    );
+
+    renderer_set_depth_image_layout(
+        resources->device,
+        resources->graphics_queue,
+        resources->command_pool,
+        resources->depth_image.image,
+        resources->depth_format
+    );
+
 	resources->render_pass = renderer_get_render_pass(
 		resources->device,
-		resources->swapchain_image_format.format
+		resources->swapchain_image_format.format,
+        resources->depth_format
 	);
 
     resources->pipeline_layout = renderer_get_pipeline_layout(
@@ -2225,6 +2287,7 @@ void renderer_resize(
         resources->render_pass,
         resources->swapchain_extent,
         resources->swapchain_buffers,
+        resources->depth_image.image_view,
         resources->framebuffers,
         resources->image_count
     );
@@ -2300,6 +2363,14 @@ void renderer_destroy_resources(
         resources->descriptor_pool,
         NULL
     );
+
+    vkDestroyImage(resources->device, resources->depth_image.image, NULL);
+    vkDestroyImageView(
+        resources->device,
+        resources->depth_image.image_view,
+        NULL
+    );
+    vkFreeMemory(resources->device, resources->depth_image.memory, NULL);
 
     for (uint32_t i = 0; i < resources->image_count; i++) {
         vkDestroyImageView(

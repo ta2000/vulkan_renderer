@@ -16,7 +16,18 @@ struct renderer_image
 struct renderer_image renderer_get_image(
     VkPhysicalDevice physical_device,
     VkDevice device,
-    VkExtent3D extent,
+    VkExtent2D extent,
+    VkFormat format,
+    VkImageAspectFlags aspect_mask,
+    VkImageTiling tiling,
+    VkImageUsageFlags usage,
+    VkMemoryPropertyFlags memory_flags
+);
+
+struct renderer_image renderer_get_sampled_image(
+    VkPhysicalDevice physical_device,
+    VkDevice device,
+    VkExtent2D extent,
     VkFormat format,
     VkImageAspectFlags aspect_mask,
     VkImageTiling tiling,

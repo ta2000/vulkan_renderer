@@ -25,6 +25,7 @@
 // - Save aspect ratio everytime window is resized ( instead of every time uniform buffer
 // updated)
 // - Move image/buffer stuff to seperate files?
+// - Use one command buffer for all transfer command stuff created at beginning
 
 struct renderer_vertex
 {
@@ -201,10 +202,12 @@ VkFormat renderer_get_depth_format(
     VkFormatFeatureFlags features
 );
 
-VkRenderPass renderer_get_render_pass(
-	VkDevice device,
-	VkFormat image_format
-	//VkFormat depth_format
+void renderer_set_depth_image_layout(
+    VkDevice device,
+    VkQueue graphics_queue,
+    VkCommandPool command_pool,
+    VkImage depth_image,
+    VkFormat depth_format
 );
 
 VkDescriptorPool renderer_get_descriptor_pool(
@@ -229,6 +232,12 @@ void renderer_update_uniform_buffer(
     VkExtent2D swapchain_extent,
     struct renderer_buffer* uniform_buffer,
     struct renderer_ubo* ubo
+);
+
+VkRenderPass renderer_get_render_pass(
+	VkDevice device,
+	VkFormat image_format,
+	VkFormat depth_format
 );
 
 VkPipelineLayout renderer_get_pipeline_layout(
@@ -258,7 +267,7 @@ void renderer_create_framebuffers(
 	VkRenderPass render_pass,
 	VkExtent2D swapchain_extent,
 	struct renderer_swapchain_buffer* swapchain_buffers,
-	//VkImageView depth_image_view,
+	VkImageView depth_image_view,
 	VkFramebuffer* framebuffers,
 	uint32_t swapchain_image_count
 );
