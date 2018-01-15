@@ -159,7 +159,7 @@ void renderer_initialize_resources(
     );
 
     resources->tex_image = renderer_load_texture(
-        "plasma.png",
+        "assets/textures/plasma.png",
         resources->physical_device,
         resources->device,
         resources->graphics_queue,
@@ -1568,10 +1568,12 @@ VkPipeline renderer_get_graphics_pipeline(
         uint32_t subpass)
 {
     VkShaderModule vert_shader_module;
-    size_t vert_shader_size = renderer_get_file_size("shaders/vert.spv");
+    size_t vert_shader_size = renderer_get_file_size(
+        "assets/shaders/vert.spv"
+    );
     char* vert_shader_code = malloc(vert_shader_size);
     renderer_read_file_to_buffer(
-        "shaders/vert.spv",
+        "assets/shaders/vert.spv",
         &vert_shader_code,
         vert_shader_size
     );
@@ -1583,10 +1585,12 @@ VkPipeline renderer_get_graphics_pipeline(
     free(vert_shader_code);
 
     VkShaderModule frag_shader_module;
-    size_t frag_shader_size = renderer_get_file_size("shaders/frag.spv");
+    size_t frag_shader_size = renderer_get_file_size(
+        "assets/shaders/frag.spv"
+    );
     char* frag_shader_code = malloc(frag_shader_size);
     renderer_read_file_to_buffer(
-        "shaders/frag.spv",
+        "assets/shaders/frag.spv",
         &frag_shader_code,
         frag_shader_size
     );

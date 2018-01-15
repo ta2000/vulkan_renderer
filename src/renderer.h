@@ -24,8 +24,8 @@
 // - Device features
 // - Save aspect ratio everytime window is resized ( instead of every time uniform buffer
 // updated)
-// - Move image/buffer stuff to seperate files?
 // - Use one command buffer for all transfer command stuff created at beginning
+// - Fix out of date swapchain error in vkAcquireNextImageKHR in drawFrame()
 
 struct renderer_vertex
 {
