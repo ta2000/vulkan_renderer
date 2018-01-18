@@ -8,7 +8,7 @@
 
 int main()
 {
-    struct game* game = malloc(sizeof(game));
+    struct game* game = malloc(sizeof(*game));
 
     game_run(game);
 

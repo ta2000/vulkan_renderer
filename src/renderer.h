@@ -20,12 +20,10 @@
 
 // TODO:
 // - Pool for queues?
-// - Fix images being malloc'd every time create_swapchain_buffers called
 // - Device features
 // - Save aspect ratio everytime window is resized ( instead of every time uniform buffer
 // updated)
 // - Use one command buffer for all transfer command stuff created at beginning
-// - Fix out of date swapchain error in vkAcquireNextImageKHR in drawFrame()
 
 struct renderer_vertex
 {
@@ -313,7 +311,9 @@ VkSemaphore renderer_get_semaphore(
 void drawFrame(struct renderer_resources* resources);
 
 void renderer_resize(
-    GLFWwindow* window, int width, int height
+    struct renderer_resources* resources,
+    int width,
+    int height
 );
 
 void renderer_destroy_resources(

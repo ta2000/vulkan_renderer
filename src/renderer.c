@@ -2164,11 +2164,10 @@ void drawFrame(struct renderer_resources* resources)
 }
 
 void renderer_resize(
-        GLFWwindow* window, int width, int height)
+        struct renderer_resources* resources,
+        int width,
+        int height)
 {
-    struct renderer_resources* resources;
-    resources = (struct renderer_resources*)glfwGetWindowUserPointer(window);
-
     vkDeviceWaitIdle(resources->device);
 
     for (uint32_t i = 0; i < resources->image_count; i++) {

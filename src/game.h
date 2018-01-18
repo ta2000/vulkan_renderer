@@ -1,8 +1,11 @@
 #ifndef GAME_H_
 #define GAME_H_
 
+#include <stdbool.h>
+
 struct game
 {
+    bool running;
     struct renderer_resources* renderer_resources;
 };
 
