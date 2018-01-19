@@ -34,6 +34,17 @@ static void key_callback(
     }
 }
 
+static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    struct game* game;
+    game = (struct game*)glfwGetWindowUserPointer(window);
+
+    game->mouse.dx = game->mouse.x - xpos;
+    game->mouse.dy = game->mouse.y - ypos;
+    game->mouse.x = xpos;
+    game->mouse.y = ypos;
+}
+
 void game_run(struct game* game)
 {
     memset(game, 0, sizeof(*game));
@@ -52,17 +63,32 @@ void game_run(struct game* game)
     glfwSetWindowUserPointer(window, game);
     glfwSetWindowSizeCallback(window, resize_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
     renderer_initialize_resources(game->renderer_resources, window);
 
+    float tmp_yaw = 4.0f;
+    float tmp_pitch = 2.0f;
+    float sensitivity = 0.01f;
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         if (game->running) {
+            tmp_yaw += game->mouse.dx * sensitivity;
+            tmp_pitch += game->mouse.dy * sensitivity;
+            renderer_update_camera(
+                &game->renderer_resources->camera,
+                4.0f, 4.0f, 2.0f,
+                tmp_pitch, tmp_yaw
+            );
+
             game_update(game);
             game_render(game);
         }
+
+        game->mouse.dx = 0.f;
+        game->mouse.dy = 0.f;
     }
 
     glfwDestroyWindow(window);

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <math.h>
 #include <assert.h>
 
 void renderer_initialize_resources(
@@ -179,7 +180,9 @@ void renderer_initialize_resources(
         resources->device,
         resources->swapchain_extent,
         &resources->uniform_buffer,
-        &resources->ubo
+        &resources->ubo,
+        resources->camera,
+        NULL
     );
 
 	resources->render_pass = renderer_get_render_pass(
@@ -1296,17 +1299,27 @@ void renderer_update_uniform_buffer(
         VkDevice device,
         VkExtent2D swapchain_extent,
         struct renderer_buffer* uniform_buffer,
-        struct renderer_ubo* ubo)
+        struct renderer_ubo* ubo,
+        struct camera camera,
+        vec3 target)
 {
     memset(ubo, 0, sizeof(*ubo));
 
     mat4x4_identity(ubo->model);
     mat4x4_rotate_all(ubo->model, 0.0f, 0.0f, 0.0f);
 
-    vec3 eye = {2.0f, 2.0f, 2.0f};
-    vec3 center = {0.0f, 0.0f, 0.0f};
+    vec3 eye = {camera.x, camera.y, camera.z};
     vec3 up = {0.0f, 0.0f, 1.0f};
-    mat4x4_look_at(ubo->view, eye, center, up);
+
+    if (target) {
+        mat4x4_look_at(ubo->view, eye, target, up);
+    } else {
+        vec3 center = {0.0f, 0.0f, camera.z};
+        center[0] = camera.x + cosf(camera.yaw);
+        center[1] = camera.y + sinf(camera.yaw);
+        center[2] = camera.pitch;
+        mat4x4_look_at(ubo->view, eye, center, up);
+    }
 
     float aspect = (float)swapchain_extent.width/swapchain_extent.height;
 
@@ -2102,6 +2115,15 @@ VkSemaphore renderer_get_semaphore(
 
 void drawFrame(struct renderer_resources* resources)
 {
+    renderer_update_uniform_buffer(
+        resources->device,
+        resources->swapchain_extent,
+        &resources->uniform_buffer,
+        &resources->ubo,
+        resources->camera,
+        NULL
+    );
+
     uint32_t image_index;
 
     VkResult result;
@@ -2308,6 +2330,21 @@ void renderer_resize(
         resources->pipeline_layout,
         &resources->descriptor_set
     );
+}
+
+void renderer_update_camera(
+        struct camera* camera,
+        float x,
+        float y,
+        float z,
+        float pitch,
+        float yaw)
+{
+    camera->x = x;
+    camera->y = y;
+    camera->z = z;
+    camera->pitch = pitch;
+    camera->yaw = yaw;
 }
 
 void renderer_destroy_resources(

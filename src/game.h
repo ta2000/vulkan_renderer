@@ -3,9 +3,16 @@
 
 #include <stdbool.h>
 
+struct mouse
+{
+    float x, y;
+    float dx, dy;
+};
+
 struct game
 {
     bool running;
+    struct mouse mouse;
     struct renderer_resources* renderer_resources;
 };
 

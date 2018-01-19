@@ -25,6 +25,12 @@
 // updated)
 // - Use one command buffer for all transfer command stuff created at beginning
 
+struct camera
+{
+    float x, y, z;
+    float pitch, yaw;
+};
+
 struct renderer_vertex
 {
     float x, y, z;
@@ -48,6 +54,8 @@ struct renderer_swapchain_buffer
 struct renderer_resources
 {
     GLFWwindow* window;
+
+    struct camera camera;
 
     VkInstance instance;
 
@@ -229,7 +237,9 @@ void renderer_update_uniform_buffer(
     VkDevice device,
     VkExtent2D swapchain_extent,
     struct renderer_buffer* uniform_buffer,
-    struct renderer_ubo* ubo
+    struct renderer_ubo* ubo,
+    struct camera camera,
+    vec3 target
 );
 
 VkRenderPass renderer_get_render_pass(
@@ -314,6 +324,15 @@ void renderer_resize(
     struct renderer_resources* resources,
     int width,
     int height
+);
+
+void renderer_update_camera(
+    struct camera* camera,
+    float x,
+    float y,
+    float z,
+    float pitch,
+    float yaw
 );
 
 void renderer_destroy_resources(
