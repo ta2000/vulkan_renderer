@@ -1314,10 +1314,11 @@ void renderer_update_uniform_buffer(
     if (target) {
         mat4x4_look_at(ubo->view, eye, target, up);
     } else {
-        vec3 center = {0.0f, 0.0f, camera.z};
-        center[0] = camera.x + cosf(camera.yaw);
-        center[1] = camera.y + sinf(camera.yaw);
-        center[2] = camera.pitch;
+        vec3 center = {
+            camera.x + cosf(camera.yaw),
+            camera.y + sinf(camera.yaw),
+            camera.pitch
+        };
         mat4x4_look_at(ubo->view, eye, center, up);
     }
 
@@ -2330,21 +2331,6 @@ void renderer_resize(
         resources->pipeline_layout,
         &resources->descriptor_set
     );
-}
-
-void renderer_update_camera(
-        struct camera* camera,
-        float x,
-        float y,
-        float z,
-        float pitch,
-        float yaw)
-{
-    camera->x = x;
-    camera->y = y;
-    camera->z = z;
-    camera->pitch = pitch;
-    camera->yaw = yaw;
 }
 
 void renderer_destroy_resources(

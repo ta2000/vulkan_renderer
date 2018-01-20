@@ -326,15 +326,6 @@ void renderer_resize(
     int height
 );
 
-void renderer_update_camera(
-    struct camera* camera,
-    float x,
-    float y,
-    float z,
-    float pitch,
-    float yaw
-);
-
 void renderer_destroy_resources(
     struct renderer_resources* resources
 );

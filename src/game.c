@@ -13,7 +13,7 @@ static void resize_callback(GLFWwindow* window, int width, int height)
     struct game* game;
     game = (struct game*)glfwGetWindowUserPointer(window);
 
-    renderer_resize(game->renderer_resources, width, height);
+    game_resize(game, width, height);
 }
 
 static void key_callback(
@@ -32,6 +32,14 @@ static void key_callback(
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
     }
+
+    struct game* game;
+    game = (struct game*)glfwGetWindowUserPointer(window);
+
+    if (action == GLFW_PRESS)
+        game_update_keys(game, key, true);
+    else if (action == GLFW_RELEASE)
+        game_update_keys(game, key, false);
 }
 
 static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
@@ -39,10 +47,7 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
     struct game* game;
     game = (struct game*)glfwGetWindowUserPointer(window);
 
-    game->mouse.dx = game->mouse.x - xpos;
-    game->mouse.dy = game->mouse.y - ypos;
-    game->mouse.x = xpos;
-    game->mouse.y = ypos;
+    game_update_mouse_pos(game, xpos, ypos);
 }
 
 void game_run(struct game* game)
@@ -64,25 +69,15 @@ void game_run(struct game* game)
     glfwSetWindowSizeCallback(window, resize_callback);
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     renderer_initialize_resources(game->renderer_resources, window);
 
-    float tmp_yaw = 4.0f;
-    float tmp_pitch = 2.0f;
-    float sensitivity = 0.01f;
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
+        game_process_input(game);
         if (game->running) {
-            tmp_yaw += game->mouse.dx * sensitivity;
-            tmp_pitch += game->mouse.dy * sensitivity;
-            renderer_update_camera(
-                &game->renderer_resources->camera,
-                4.0f, 4.0f, 2.0f,
-                tmp_pitch, tmp_yaw
-            );
-
             game_update(game);
             game_render(game);
         }
@@ -98,6 +93,41 @@ void game_run(struct game* game)
     free(game->renderer_resources);
 }
 
+void game_process_input(struct game* game)
+{
+    struct camera* camera = &game->renderer_resources->camera;
+
+    float cam_speed = 0.004f;
+    if (game->keys[GLFW_KEY_W]) {
+        camera->x += cosf(camera->yaw) * cam_speed;
+        camera->y += sinf(camera->yaw) * cam_speed;
+    }
+    if (game->keys[GLFW_KEY_S]) {
+        camera->x -= cosf(camera->yaw) * cam_speed;
+        camera->y -= sinf(camera->yaw) * cam_speed;
+    }
+    if (game->keys[GLFW_KEY_A]) {
+        camera->x += cosf(camera->yaw + M_PI/2) * cam_speed;
+        camera->y += sinf(camera->yaw + M_PI/2) * cam_speed;
+    }
+    if (game->keys[GLFW_KEY_D]) {
+        camera->x -= cosf(camera->yaw + M_PI/2) * cam_speed;
+        camera->y -= sinf(camera->yaw + M_PI/2) * cam_speed;
+    }
+    if (game->keys[GLFW_KEY_LEFT_SHIFT]) {
+        camera->z += cam_speed;
+        camera->pitch += cam_speed;
+    }
+    if (game->keys[GLFW_KEY_LEFT_CONTROL]) {
+        camera->z -= cam_speed;
+        camera->pitch -= cam_speed;
+    }
+
+    float sensitivity = 0.005f;
+    camera->yaw += game->mouse.dx * sensitivity;
+    camera->pitch += game->mouse.dy * sensitivity;
+}
+
 void game_update(struct game* game)
 {
     // Update code
@@ -106,4 +136,30 @@ void game_update(struct game* game)
 void game_render(struct game* game)
 {
     drawFrame(game->renderer_resources);
+}
+
+void game_resize(
+        struct game* game,
+        int width, int height)
+{
+    renderer_resize(game->renderer_resources, width, height);
+}
+
+void game_update_keys(
+        struct game* game,
+        int key_index,
+        bool pressed)
+{
+    game->keys[key_index] = pressed;
+}
+
+void game_update_mouse_pos(
+        struct game* game,
+        double x,
+        double y)
+{
+    game->mouse.dx = game->mouse.x - (float)x;
+    game->mouse.dy = game->mouse.y - (float)y;
+    game->mouse.x = (float)x;
+    game->mouse.y = (float)y;
 }
