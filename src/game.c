@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 static void resize_callback(GLFWwindow* window, int width, int height)
 {
@@ -38,7 +39,7 @@ static void key_callback(
 
     if (action == GLFW_PRESS)
         game_update_keys(game, key, true);
-    else if (action == GLFW_RELEASE)
+    if (action == GLFW_RELEASE)
         game_update_keys(game, key, false);
 }
 
@@ -97,35 +98,46 @@ void game_process_input(struct game* game)
 {
     struct camera* camera = &game->renderer_resources->camera;
 
-    float cam_speed = 0.004f;
-    if (game->keys[GLFW_KEY_W]) {
-        camera->x += cosf(camera->yaw) * cam_speed;
-        camera->y += sinf(camera->yaw) * cam_speed;
-    }
-    if (game->keys[GLFW_KEY_S]) {
-        camera->x -= cosf(camera->yaw) * cam_speed;
-        camera->y -= sinf(camera->yaw) * cam_speed;
-    }
-    if (game->keys[GLFW_KEY_A]) {
-        camera->x += cosf(camera->yaw + M_PI/2) * cam_speed;
-        camera->y += sinf(camera->yaw + M_PI/2) * cam_speed;
-    }
-    if (game->keys[GLFW_KEY_D]) {
-        camera->x -= cosf(camera->yaw + M_PI/2) * cam_speed;
-        camera->y -= sinf(camera->yaw + M_PI/2) * cam_speed;
-    }
-    if (game->keys[GLFW_KEY_LEFT_SHIFT]) {
-        camera->z += cam_speed;
-        camera->pitch += cam_speed;
-    }
-    if (game->keys[GLFW_KEY_LEFT_CONTROL]) {
-        camera->z -= cam_speed;
-        camera->pitch -= cam_speed;
+    if (game->running) {
+        float cam_speed = 0.0035f;
+        float sensitivity = 0.005f;
+
+        if (game->keys[GLFW_KEY_W]) {
+            camera->x += cosf(camera->yaw) * cam_speed;
+            camera->y += sinf(camera->yaw) * cam_speed;
+        }
+        if (game->keys[GLFW_KEY_S]) {
+            camera->x -= cosf(camera->yaw) * cam_speed;
+            camera->y -= sinf(camera->yaw) * cam_speed;
+        }
+        if (game->keys[GLFW_KEY_A]) {
+            camera->x += cosf(camera->yaw + M_PI/2) * cam_speed;
+            camera->y += sinf(camera->yaw + M_PI/2) * cam_speed;
+        }
+        if (game->keys[GLFW_KEY_D]) {
+            camera->x -= cosf(camera->yaw + M_PI/2) * cam_speed;
+            camera->y -= sinf(camera->yaw + M_PI/2) * cam_speed;
+        }
+
+        if (game->keys[GLFW_KEY_LEFT_SHIFT]) {
+            camera->z += cam_speed;
+            camera->pitch += cam_speed;
+        }
+        if (game->keys[GLFW_KEY_LEFT_CONTROL]) {
+            camera->z -= cam_speed;
+            camera->pitch -= cam_speed;
+        }
+
+        camera->yaw += game->mouse.dx * sensitivity;
+        camera->pitch += game->mouse.dy * sensitivity;
     }
 
-    float sensitivity = 0.005f;
-    camera->yaw += game->mouse.dx * sensitivity;
-    camera->pitch += game->mouse.dy * sensitivity;
+    if (game->keys[GLFW_KEY_ESCAPE] && !game->keys_prev[GLFW_KEY_ESCAPE])
+    {
+        game->running = !game->running;
+    }
+
+    memcpy(game->keys_prev, game->keys, GLFW_KEY_LAST * sizeof(game->keys[0]));
 }
 
 void game_update(struct game* game)

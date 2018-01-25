@@ -24,6 +24,7 @@
 // - Save aspect ratio everytime window is resized ( instead of every time uniform buffer
 // updated)
 // - Use one command buffer for all transfer command stuff created at beginning
+// - Update uniform buffer on resize while paused
 
 struct camera
 {

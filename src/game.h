@@ -18,6 +18,7 @@ struct game
     bool running;
     struct mouse mouse;
     bool keys[GLFW_KEY_LAST];
+    bool keys_prev[GLFW_KEY_LAST];
     struct renderer_resources* renderer_resources;
 };
 
