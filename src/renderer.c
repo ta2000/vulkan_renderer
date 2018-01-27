@@ -1141,6 +1141,8 @@ void renderer_create_swapchain_buffers(
         );
         assert(result == VK_SUCCESS);
     }
+
+    free(images);
 }
 
 VkFormat renderer_get_depth_format(
