@@ -3,6 +3,11 @@
 #include "renderer_tools.h"
 #include "renderer.h"
 
+#include <assimp/cimport.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <assimp/vector3.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -160,7 +165,7 @@ void renderer_initialize_resources(
     );
 
     resources->tex_image = renderer_load_texture(
-        "assets/textures/plasma.png",
+        "assets/textures/chalet.jpg",
         resources->physical_device,
         resources->device,
         resources->graphics_queue,
@@ -219,37 +224,45 @@ void renderer_initialize_resources(
         resources->image_count
     );
 
-	struct renderer_vertex vertices[] = {
-        {.x=-0.5f,  .y=-0.5f,   .z=0.0f,    .u=1.0f,    .v=0.0f},
-        {.x=0.5f,   .y=-0.5f,   .z=0.0f,    .u=0.0f,    .v=0.0f},
-        {.x=0.5f,   .y=0.5f,    .z=0.0f,    .u=0.0f,    .v=1.0f},
-        {.x=-0.5f,  .y=0.5f,    .z=0.0f,    .u=1.0f,    .v=1.0f},
+    uint32_t vertex_count;
+    uint32_t index_count;
+    struct renderer_vertex* vertices;
+    uint32_t* indices;
+    renderer_load_model(
+        "assets/models/chalet.obj",
+        &vertex_count,
+        &index_count,
+        NULL,
+        NULL
+    );
+    vertices = malloc(vertex_count * sizeof(*vertices));
+    indices = malloc(index_count * sizeof(*indices));
+    renderer_load_model(
+        "assets/models/chalet.obj",
+        &vertex_count,
+        &index_count,
+        vertices,
+        indices
+    );
 
-        {.x=-0.5f,  .y=-0.5f,   .z=-.5f,    .u=1.0f,    .v=0.0f},
-        {.x=0.5f,   .y=-0.5f,   .z=-.5f,    .u=0.0f,    .v=0.0f},
-        {.x=0.5f,   .y=0.5f,    .z=-.5f,    .u=0.0f,    .v=1.0f},
-        {.x=-0.5f,  .y=0.5f,    .z=-.5f,    .u=1.0f,    .v=1.0f}
-    };
     resources->vbo = renderer_get_vertex_buffer(
         resources->physical_device,
         resources->device,
         resources->command_pool,
         resources->graphics_queue,
-        vertices, 8
+        vertices,
+        vertex_count
     );
 
-	uint32_t indices[] = {
-        0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4
-    };
     resources->ibo = renderer_get_index_buffer(
         resources->physical_device,
         resources->device,
         resources->command_pool,
         resources->graphics_queue,
-        indices, 12
+        indices,
+        index_count
     );
-    resources->index_count = 12;
+    resources->index_count = index_count;
 
     renderer_record_draw_commands(
         resources->graphics_pipeline,
@@ -2435,4 +2448,59 @@ void renderer_destroy_resources(
     );
 
     vkDestroyInstance(resources->instance, NULL);
+}
+
+void renderer_load_model(
+        const char* src,
+        uint32_t* vertex_count,
+        uint32_t* index_count,
+        struct renderer_vertex* vertices,
+        uint32_t* indices)
+{
+    const struct aiScene* scene;
+    scene = aiImportFile(
+        src,
+        aiProcess_FlipUVs |
+        aiProcess_Triangulate |
+        aiProcess_JoinIdenticalVertices
+    );
+    assert(scene);
+
+    *vertex_count = scene->mMeshes[0]->mNumVertices;
+    *index_count = scene->mMeshes[0]->mNumFaces * 3;
+
+    if (!vertices || !indices) {
+        aiReleaseImport(scene);
+        return;
+    }
+
+    for (uint32_t i = 0; i < *vertex_count; i++) {
+        vertices[i].x = scene->mMeshes[0]->mVertices[i].x;
+        vertices[i].y = scene->mMeshes[0]->mVertices[i].y;
+        vertices[i].z = scene->mMeshes[0]->mVertices[i].z;
+        vertices[i].u = scene->mMeshes[0]->mTextureCoords[0][i].x;
+        vertices[i].v = scene->mMeshes[0]->mTextureCoords[0][i].y;
+    }
+
+    /*for (uint32_t i = 0; i < *index_count; i+=3) {
+        for (uint32_t j = 0; j < 3; j++) {
+            indices[i] = scene->mMeshes[0]->mFaces[(int)i/3].mIndices[j];
+        }
+    }*/
+
+    uint32_t indexCount = 0;
+    struct aiMesh* mesh = scene->mMeshes[0];
+	for (uint32_t i=0; i<mesh->mNumFaces; i++)
+    {
+        struct aiFace* face = &(mesh->mFaces[i]);
+        assert(face->mNumIndices == 3);
+        indices[indexCount] = face->mIndices[0];
+        indexCount++;
+        indices[indexCount] = face->mIndices[1];
+        indexCount++;
+        indices[indexCount] = face->mIndices[2];
+        indexCount++;
+    }
+
+    aiReleaseImport(scene);
 }

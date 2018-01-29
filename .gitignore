@@ -17,3 +17,5 @@ stamp-h1
 
 *.o
 .deps
+
+planning.txt

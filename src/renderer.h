@@ -331,4 +331,12 @@ void renderer_destroy_resources(
     struct renderer_resources* resources
 );
 
+void renderer_load_model(
+    const char* src,
+    uint32_t* vertex_count,
+    uint32_t* index_count,
+    struct renderer_vertex* vertices,
+    uint32_t* indices
+);
+
 #endif

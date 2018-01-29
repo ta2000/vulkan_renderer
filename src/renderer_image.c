@@ -310,7 +310,7 @@ struct renderer_image renderer_load_texture(
     );
     assert(pixels && tex_width && tex_height);
 
-    VkDeviceSize image_size = tex_width * tex_height * tex_channels;
+    VkDeviceSize image_size = tex_width * tex_height * 4;
 
     VkExtent2D extent = {.width = tex_width, .height = tex_height};
     tex_image = renderer_get_sampled_image(
