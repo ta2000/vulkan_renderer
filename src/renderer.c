@@ -2482,24 +2482,10 @@ void renderer_load_model(
         vertices[i].v = scene->mMeshes[0]->mTextureCoords[0][i].y;
     }
 
-    /*for (uint32_t i = 0; i < *index_count; i+=3) {
+    for (uint32_t i = 0; i < *index_count; i+=3) {
         for (uint32_t j = 0; j < 3; j++) {
-            indices[i] = scene->mMeshes[0]->mFaces[(int)i/3].mIndices[j];
+            indices[i+j] = scene->mMeshes[0]->mFaces[(int)(i/3.f)].mIndices[j];
         }
-    }*/
-
-    uint32_t indexCount = 0;
-    struct aiMesh* mesh = scene->mMeshes[0];
-	for (uint32_t i=0; i<mesh->mNumFaces; i++)
-    {
-        struct aiFace* face = &(mesh->mFaces[i]);
-        assert(face->mNumIndices == 3);
-        indices[indexCount] = face->mIndices[0];
-        indexCount++;
-        indices[indexCount] = face->mIndices[1];
-        indexCount++;
-        indices[indexCount] = face->mIndices[2];
-        indexCount++;
     }
 
     aiReleaseImport(scene);
