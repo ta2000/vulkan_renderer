@@ -1,6 +1,7 @@
 #include "renderer_image.h"
 #include "renderer_buffer.h"
 #include "renderer_tools.h"
+#include "renderer_mesh.h"
 #include "renderer.h"
 
 #include <assimp/cimport.h>
@@ -22,6 +23,8 @@ void renderer_initialize_resources(
     memset(resources, 0, sizeof(*resources));
 
     resources->window = window;
+
+    resources->meshes = malloc(10 * sizeof(*resources->meshes));
 
     resources->instance = renderer_get_instance();
 
@@ -224,23 +227,19 @@ void renderer_initialize_resources(
         resources->image_count
     );
 
-    uint32_t vertex_count;
+    /*uint32_t vertex_count;
     uint32_t index_count;
     struct renderer_vertex* vertices;
     uint32_t* indices;
-    renderer_load_model(
+    renderer_get_model_vertex_count(
         "assets/models/chalet.obj",
         &vertex_count,
-        &index_count,
-        NULL,
-        NULL
+        &index_count
     );
     vertices = malloc(vertex_count * sizeof(*vertices));
     indices = malloc(index_count * sizeof(*indices));
     renderer_load_model(
         "assets/models/chalet.obj",
-        &vertex_count,
-        &index_count,
         vertices,
         indices
     );
@@ -262,7 +261,14 @@ void renderer_initialize_resources(
         indices,
         index_count
     );
-    resources->index_count = index_count;
+    resources->index_count = index_count;*/
+
+    const char* model_srcs[] = {"assets/models/chalet.obj"};
+    renderer_generate_meshes(
+        resources,
+        model_srcs,
+        1
+    );
 
     renderer_record_draw_commands(
         resources->graphics_pipeline,
@@ -273,7 +279,7 @@ void renderer_initialize_resources(
         resources->image_count,
         resources->vbo,
         resources->ibo,
-        resources->index_count,
+        resources->meshes[0].index_count,
         resources->pipeline_layout,
         &resources->descriptor_set
     );
@@ -2342,7 +2348,7 @@ void renderer_resize(
         resources->image_count,
         resources->vbo,
         resources->ibo,
-        resources->index_count,
+        resources->meshes[0].index_count,
         resources->pipeline_layout,
         &resources->descriptor_set
     );
@@ -2351,6 +2357,8 @@ void renderer_resize(
 void renderer_destroy_resources(
         struct renderer_resources* resources)
 {
+    renderer_destroy_meshes(resources);
+
     vkDestroyImage(resources->device, resources->tex_image.image, NULL);
     vkDestroyImageView(
         resources->device,
@@ -2359,11 +2367,6 @@ void renderer_destroy_resources(
     );
     vkDestroySampler(resources->device, resources->tex_image.sampler, NULL);
     vkFreeMemory(resources->device, resources->tex_image.memory, NULL);
-
-    vkDestroyBuffer(resources->device, resources->vbo.buffer, NULL);
-    vkFreeMemory(resources->device, resources->vbo.memory, NULL);
-    vkDestroyBuffer(resources->device, resources->ibo.buffer, NULL);
-    vkFreeMemory(resources->device, resources->ibo.memory, NULL);
 
     vkDestroySemaphore(resources->device, resources->image_available, NULL);
     vkDestroySemaphore(resources->device, resources->render_finished, NULL);
@@ -2450,12 +2453,119 @@ void renderer_destroy_resources(
     vkDestroyInstance(resources->instance, NULL);
 }
 
-void renderer_load_model(
+void renderer_generate_meshes(
+        struct renderer_resources* resources,
+        const char** models,
+        const uint32_t model_count)
+{
+    uint32_t* vertex_offsets = malloc(model_count * sizeof(*vertex_offsets));
+    vertex_offsets[0] = 0;
+    uint32_t* index_offsets = malloc(model_count * sizeof(*index_offsets));
+    index_offsets[0] = 0;
+
+    uint32_t* index_counts = malloc(model_count * sizeof(*index_counts));
+
+    uint32_t total_vertex_count = 0;
+    uint32_t total_index_count = 0;
+
+    for (uint32_t i = 0; i < model_count; i++) {
+        uint32_t vertex_count;
+        uint32_t index_count;
+
+        renderer_get_model_vertex_count(
+            models[i],
+            &vertex_count,
+            &index_count
+        );
+
+        index_counts[i] = index_count;
+
+        if (i < model_count) {
+            vertex_offsets[i + 1] = vertex_offsets[i] + vertex_count;
+            index_offsets[i + 1] = index_offsets[i] + index_count;
+        }
+
+        total_vertex_count += vertex_count;
+        total_index_count += index_count;
+    }
+
+    struct renderer_vertex* total_vertices;
+    total_vertices = malloc(total_vertex_count * sizeof(*total_vertices));
+
+    uint32_t* total_indices;
+    total_indices = malloc(total_index_count * sizeof(*total_indices));
+
+    for (uint32_t i = 0; i < model_count; i++) {
+        renderer_load_model(
+            models[i],
+            &total_vertices[vertex_offsets[i]],
+            &total_indices[index_offsets[i]]
+        );
+    }
+
+    resources->vbo = renderer_get_vertex_buffer(
+        resources->physical_device,
+        resources->device,
+        resources->command_pool,
+        resources->graphics_queue,
+        total_vertices,
+        total_vertex_count
+    );
+
+    resources->ibo = renderer_get_index_buffer(
+        resources->physical_device,
+        resources->device,
+        resources->command_pool,
+        resources->graphics_queue,
+        total_indices,
+        total_index_count
+    );
+
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = resources->command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+        .commandBufferCount = 1
+    };
+
+    for (uint32_t i = 0; i < model_count; i++) {
+        resources->meshes[i].vbo = &resources->vbo;
+        resources->meshes[i].vbo_offset = vertex_offsets[i];
+        resources->meshes[i].ibo = &resources->ibo;
+        resources->meshes[i].ibo_offset = index_offsets[i];
+        resources->meshes[i].index_count = index_counts[i];
+
+        vkAllocateCommandBuffers(
+            resources->device,
+            &cmd_alloc_info,
+            &resources->meshes[i].cmd
+        );
+    }
+
+    free(total_indices);
+    free(total_vertices);
+    free(index_counts);
+    free(index_offsets);
+    free(vertex_offsets);
+}
+
+void renderer_destroy_meshes(
+        struct renderer_resources* resources)
+{
+    vkDestroyBuffer(resources->device, resources->vbo.buffer, NULL);
+    vkFreeMemory(resources->device, resources->vbo.memory, NULL);
+
+    vkDestroyBuffer(resources->device, resources->ibo.buffer, NULL);
+    vkFreeMemory(resources->device, resources->ibo.memory, NULL);
+
+    // Command buffer destroyed with pool
+}
+
+void renderer_get_model_vertex_count(
         const char* src,
         uint32_t* vertex_count,
-        uint32_t* index_count,
-        struct renderer_vertex* vertices,
-        uint32_t* indices)
+        uint32_t* index_count)
 {
     const struct aiScene* scene;
     scene = aiImportFile(
@@ -2469,12 +2579,27 @@ void renderer_load_model(
     *vertex_count = scene->mMeshes[0]->mNumVertices;
     *index_count = scene->mMeshes[0]->mNumFaces * 3;
 
-    if (!vertices || !indices) {
-        aiReleaseImport(scene);
-        return;
-    }
+    aiReleaseImport(scene);
+}
 
-    for (uint32_t i = 0; i < *vertex_count; i++) {
+void renderer_load_model(
+        const char* src,
+        struct renderer_vertex* vertices,
+        uint32_t* indices)
+{
+    const struct aiScene* scene;
+    scene = aiImportFile(
+        src,
+        aiProcess_FlipUVs |
+        aiProcess_Triangulate |
+        aiProcess_JoinIdenticalVertices
+    );
+    assert(scene);
+
+    uint32_t vertex_count = scene->mMeshes[0]->mNumVertices;
+    uint32_t index_count = scene->mMeshes[0]->mNumFaces * 3;
+
+    for (uint32_t i = 0; i < vertex_count; i++) {
         vertices[i].x = scene->mMeshes[0]->mVertices[i].x;
         vertices[i].y = scene->mMeshes[0]->mVertices[i].y;
         vertices[i].z = scene->mMeshes[0]->mVertices[i].z;
@@ -2482,7 +2607,7 @@ void renderer_load_model(
         vertices[i].v = scene->mMeshes[0]->mTextureCoords[0][i].y;
     }
 
-    for (uint32_t i = 0; i < *index_count; i+=3) {
+    for (uint32_t i = 0; i < index_count; i+=3) {
         for (uint32_t j = 0; j < 3; j++) {
             indices[i+j] = scene->mMeshes[0]->mFaces[(int)(i/3.f)].mIndices[j];
         }

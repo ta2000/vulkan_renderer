@@ -58,6 +58,8 @@ struct renderer_resources
 
     struct camera camera;
 
+    struct renderer_mesh* meshes;
+
     VkInstance instance;
 
     char* surface_extensions[64];
@@ -331,10 +333,24 @@ void renderer_destroy_resources(
     struct renderer_resources* resources
 );
 
-void renderer_load_model(
+void renderer_generate_meshes(
+    struct renderer_resources* resources,
+    const char** models,
+    const uint32_t model_count
+);
+
+void renderer_destroy_meshes(
+    struct renderer_resources* resources
+);
+
+void renderer_get_model_vertex_count(
     const char* src,
     uint32_t* vertex_count,
-    uint32_t* index_count,
+    uint32_t* index_count
+);
+
+void renderer_load_model(
+    const char* src,
     struct renderer_vertex* vertices,
     uint32_t* indices
 );
