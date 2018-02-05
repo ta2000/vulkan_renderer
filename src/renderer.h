@@ -25,6 +25,7 @@
 // updated)
 // - Use one command buffer for all transfer command stuff created at beginning
 // - Update uniform buffer on resize while paused
+// - Remove glfwGetWindowSize for swapchain image size
 
 struct camera
 {
@@ -38,9 +39,13 @@ struct renderer_vertex
     float u, v;
 };
 
-struct renderer_ubo
+struct renderer_ubo_instance
 {
     mat4x4 model;
+};
+
+struct renderer_ubo_view
+{
     mat4x4 view;
     mat4x4 projection;
 };
@@ -94,8 +99,10 @@ struct renderer_resources
     VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_layout;
     VkDescriptorSet descriptor_set;
-    struct renderer_buffer uniform_buffer;
-    struct renderer_ubo ubo;
+    struct renderer_buffer uniform_buffer_instance;
+    struct renderer_ubo_instance ubo_instance;
+    struct renderer_buffer uniform_buffer_view;
+    struct renderer_ubo_view ubo_view;
 
     VkRenderPass render_pass;
 
@@ -232,15 +239,22 @@ VkDescriptorSet renderer_get_descriptor_set(
     VkDescriptorPool descriptor_pool,
     VkDescriptorSetLayout* descriptor_layouts,
     uint32_t descriptor_count,
-    struct renderer_buffer* uniform_buffer,
+    struct renderer_buffer* uniform_buffer_instance,
+    struct renderer_buffer* uniform_buffer_view,
     struct renderer_image* tex_image
 );
 
-void renderer_update_uniform_buffer(
+void renderer_update_uniform_buffer_instance(
+    VkDevice device,
+    struct renderer_buffer* uniform_buffer_instance,
+    struct renderer_ubo_instance* ubo_instance
+);
+
+void renderer_update_uniform_buffer_view(
     VkDevice device,
     VkExtent2D swapchain_extent,
-    struct renderer_buffer* uniform_buffer,
-    struct renderer_ubo* ubo,
+    struct renderer_buffer* uniform_buffer_view,
+    struct renderer_ubo_view* ubo_view,
     struct camera camera,
     vec3 target
 );
