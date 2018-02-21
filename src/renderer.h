@@ -39,17 +39,6 @@ struct renderer_vertex
     float u, v;
 };
 
-struct renderer_ubo_instance
-{
-    mat4x4 model;
-};
-
-struct renderer_ubo_view
-{
-    mat4x4 view;
-    mat4x4 projection;
-};
-
 struct renderer_swapchain_buffer
 {
     VkImage image;
@@ -99,10 +88,14 @@ struct renderer_resources
     VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_layout;
     VkDescriptorSet descriptor_set;
-    struct renderer_buffer uniform_buffer_instance;
-    struct renderer_ubo_instance ubo_instance;
-    struct renderer_buffer uniform_buffer_view;
-    struct renderer_ubo_view ubo_view;
+
+    struct renderer_image tex_image;
+
+    struct renderer_buffer dynamic_uniform_buffer;
+    struct renderer_buffer view_projection_uniform_buffer;
+    mat4x4 model_matrix;
+    mat4x4 view_matrix;
+    mat4x4 projection_matrix;
 
     VkRenderPass render_pass;
 
@@ -114,8 +107,6 @@ struct renderer_resources
     struct renderer_buffer vbo;
     struct renderer_buffer ibo;
     uint32_t index_count;
-
-    struct renderer_image tex_image;
 
     VkSemaphore image_available;
     VkSemaphore render_finished;
@@ -244,17 +235,17 @@ VkDescriptorSet renderer_get_descriptor_set(
     struct renderer_image* tex_image
 );
 
-void renderer_update_uniform_buffer_instance(
+void renderer_update_dynamic_uniform_buffer(
     VkDevice device,
     struct renderer_buffer* uniform_buffer_instance,
-    struct renderer_ubo_instance* ubo_instance
+    mat4x4 model_matrix
 );
 
-void renderer_update_uniform_buffer_view(
-    VkDevice device,
+void renderer_update_view_projection_uniform_buffer(
     VkExtent2D swapchain_extent,
-    struct renderer_buffer* uniform_buffer_view,
-    struct renderer_ubo_view* ubo_view,
+    struct renderer_buffer* uniform_buffer,
+    mat4x4 view_matrix,
+    mat4x4 projection_matrix,
     struct camera camera,
     vec3 target
 );

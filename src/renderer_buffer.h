@@ -20,6 +20,22 @@ struct renderer_buffer renderer_get_buffer(
     VkMemoryPropertyFlags memory_flags
 );
 
+void renderer_destroy_buffer(
+    VkDevice device,
+    struct renderer_buffer* buffer
+);
+
+void renderer_map_buffer(
+    VkDevice device,
+    VkDeviceSize offset,
+    struct renderer_buffer* buffer
+);
+
+void renderer_unmap_buffer(
+    VkDevice device,
+    struct renderer_buffer* buffer
+);
+
 void renderer_copy_buffer_to_buffer(
     VkDevice device,
     VkCommandPool command_pool,
