@@ -21,4 +21,9 @@ uint32_t renderer_find_memory_type(
 	VkMemoryType* memory_types
 );
 
+void* aligned_alloc(
+    size_t alignment,
+    size_t size
+);
+
 #endif

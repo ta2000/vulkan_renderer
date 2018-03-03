@@ -277,11 +277,14 @@ void renderer_initialize_resources(
     );
     resources->index_count = index_count;*/
 
-    const char* model_srcs[] = {"assets/models/chalet.obj"};
+    const char* model_srcs[] = {
+        "assets/models/robot.dae",
+        "assets/models/chalet.obj"
+    };
     renderer_generate_meshes(
         resources,
         model_srcs,
-        1
+        2
     );
 
     renderer_record_draw_commands(
@@ -291,9 +294,8 @@ void renderer_initialize_resources(
         resources->framebuffers,
         resources->swapchain_buffers,
         resources->image_count,
-        resources->vbo,
-        resources->ibo,
-        resources->meshes[0].index_count,
+        2, // Mesh count
+        resources->meshes,
         resources->pipeline_layout,
         &resources->descriptor_set
     );
@@ -2047,9 +2049,8 @@ void renderer_record_draw_commands(
         VkFramebuffer* framebuffers,
         struct renderer_swapchain_buffer* swapchain_buffers,
         uint32_t swapchain_image_count,
-        struct renderer_buffer vbo,
-        struct renderer_buffer ibo,
-		uint32_t index_count,
+        uint32_t mesh_count,
+        struct renderer_mesh* meshes,
         VkPipelineLayout pipeline_layout,
         VkDescriptorSet* descriptor_sets)
 {
@@ -2118,13 +2119,13 @@ void renderer_record_draw_commands(
             swapchain_buffers[i].cmd,
             0,
             1,
-            &vbo.buffer,
+            &meshes[0].vbo->buffer,
             offsets
         );
 
         vkCmdBindIndexBuffer(
             swapchain_buffers[i].cmd,
-            ibo.buffer,
+            meshes[0].ibo->buffer,
             0,
             VK_INDEX_TYPE_UINT32
         );
@@ -2141,14 +2142,16 @@ void renderer_record_draw_commands(
             dynamic_offsets
         );
 
-        vkCmdDrawIndexed(
-            swapchain_buffers[i].cmd,
-            index_count,
-            1,
-            0,
-            0,
-            0
-        );
+        for (uint32_t j = 0; j < mesh_count; j++) {
+            vkCmdDrawIndexed(
+                swapchain_buffers[i].cmd,
+                meshes[j].index_count,
+                1,
+                meshes[j].ibo_offset,
+                meshes[j].vbo_offset,
+                0
+            );
+        }
 
         vkCmdEndRenderPass(swapchain_buffers[i].cmd);
 
@@ -2397,9 +2400,8 @@ void renderer_resize(
         resources->framebuffers,
         resources->swapchain_buffers,
         resources->image_count,
-        resources->vbo,
-        resources->ibo,
-        resources->meshes[0].index_count,
+        2, // Mesh count
+        resources->meshes,
         resources->pipeline_layout,
         &resources->descriptor_set
     );

@@ -314,12 +314,10 @@ void renderer_record_draw_commands(
     VkFramebuffer* framebuffers,
     struct renderer_swapchain_buffer* swapchain_buffers,
     uint32_t swapchain_image_count,
-    struct renderer_buffer vertex_buffer,
-    struct renderer_buffer index_buffer,
-    uint32_t index_count,
+    uint32_t mesh_count,
+    struct renderer_mesh* meshes,
     VkPipelineLayout pipeline_layout,
     VkDescriptorSet* descriptor_set
-    //struct renderer_mesh* mesh
 );
 
 VkSemaphore renderer_get_semaphore(

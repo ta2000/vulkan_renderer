@@ -62,3 +62,11 @@ uint32_t renderer_find_memory_type(
 
     return memory_type;
 }
+
+void* aligned_alloc(size_t alignment, size_t size)
+{
+    void* ptr = NULL;
+    // TODO: add windows equivalent
+    posix_memalign(&ptr, alignment, size);
+    return ptr;
+}
