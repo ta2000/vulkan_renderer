@@ -1,6 +1,7 @@
 #include "renderer_tools.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
 
