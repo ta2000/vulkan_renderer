@@ -26,6 +26,8 @@ void renderer_initialize_resources(
 
     resources->meshes = malloc(10 * sizeof(*resources->meshes));
 
+    queue_init(&resources->mesh_draw_queue, sizeof(resources->meshes), 6);
+
     resources->instance = renderer_get_instance();
 
     resources->debug_callback_ext = renderer_get_debug_callback_ext(
@@ -241,67 +243,34 @@ void renderer_initialize_resources(
         resources->image_count
     );
 
-    /*uint32_t vertex_count;
-    uint32_t index_count;
-    struct renderer_vertex* vertices;
-    uint32_t* indices;
-    renderer_get_model_vertex_count(
-        "assets/models/chalet.obj",
-        &vertex_count,
-        &index_count
-    );
-    vertices = malloc(vertex_count * sizeof(*vertices));
-    indices = malloc(index_count * sizeof(*indices));
-    renderer_load_model(
-        "assets/models/chalet.obj",
-        vertices,
-        indices
-    );
-
-    resources->vbo = renderer_get_vertex_buffer(
-        resources->physical_device,
-        resources->device,
-        resources->command_pool,
-        resources->graphics_queue,
-        vertices,
-        vertex_count
-    );
-
-    resources->ibo = renderer_get_index_buffer(
-        resources->physical_device,
-        resources->device,
-        resources->command_pool,
-        resources->graphics_queue,
-        indices,
-        index_count
-    );
-    resources->index_count = index_count;*/
+	resources->image_available = renderer_get_semaphore(resources->device);
+	resources->render_finished = renderer_get_semaphore(resources->device);
 
     const char* model_srcs[] = {
-        "assets/models/robot.dae",
+        //"assets/models/robot.dae",
         "assets/models/chalet.obj"
     };
     renderer_generate_meshes(
         resources,
         model_srcs,
-        2
+        1
     );
 
-    renderer_record_draw_commands(
-        resources->graphics_pipeline,
-        resources->render_pass,
-        resources->swapchain_extent,
-        resources->framebuffers,
-        resources->swapchain_buffers,
-        resources->image_count,
-        2, // Mesh count
-        resources->meshes,
-        resources->pipeline_layout,
-        &resources->descriptor_set
-    );
+    struct renderer_mesh* test = &resources->meshes[0];
 
-	resources->image_available = renderer_get_semaphore(resources->device);
-	resources->render_finished = renderer_get_semaphore(resources->device);
+    for (uint32_t i = 0; i < resources->image_count; i++) {
+        queue_enqueue(&resources->mesh_draw_queue, &test);
+        renderer_record_draw_commands(
+            resources->graphics_pipeline,
+            resources->render_pass,
+            resources->swapchain_extent,
+            resources->framebuffers[i],
+            resources->swapchain_buffers[i],
+            &resources->mesh_draw_queue,
+            resources->pipeline_layout,
+            &resources->descriptor_set
+        );
+    }
 }
 
 VkInstance renderer_get_instance()
@@ -2046,11 +2015,9 @@ void renderer_record_draw_commands(
         VkPipeline pipeline,
         VkRenderPass render_pass,
         VkExtent2D swapchain_extent,
-        VkFramebuffer* framebuffers,
-        struct renderer_swapchain_buffer* swapchain_buffers,
-        uint32_t swapchain_image_count,
-        uint32_t mesh_count,
-        struct renderer_mesh* meshes,
+        VkFramebuffer framebuffer,
+        struct renderer_swapchain_buffer swapchain_buffer,
+        struct queue* mesh_draw_queue,
         VkPipelineLayout pipeline_layout,
         VkDescriptorSet* descriptor_sets)
 {
@@ -2076,63 +2043,66 @@ void renderer_record_draw_commands(
         .pClearValues = clear_values,
     };
 
-    for (uint32_t i = 0; i < swapchain_image_count; i++) {
-        VkResult result;
-        result = vkBeginCommandBuffer(
-            swapchain_buffers[i].cmd,
-            &cmd_begin_info
-        );
-        assert(result == VK_SUCCESS);
+    VkResult result;
+    result = vkBeginCommandBuffer(
+        swapchain_buffer.cmd,
+        &cmd_begin_info
+    );
+    assert(result == VK_SUCCESS);
 
-        render_pass_info.framebuffer = framebuffers[i];
-        vkCmdBeginRenderPass(
-            swapchain_buffers[i].cmd,
-            &render_pass_info,
-            VK_SUBPASS_CONTENTS_INLINE
-        );
+    render_pass_info.framebuffer = framebuffer;
+    vkCmdBeginRenderPass(
+        swapchain_buffer.cmd,
+        &render_pass_info,
+        VK_SUBPASS_CONTENTS_INLINE
+    );
 
-        VkViewport viewport = {
-            .x = 0,
-            .y = 0,
-            .width = swapchain_extent.width,
-            .height = swapchain_extent.height,
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f
-        };
-        vkCmdSetViewport(swapchain_buffers[i].cmd, 0, 1, &viewport);
+    VkViewport viewport = {
+        .x = 0,
+        .y = 0,
+        .width = swapchain_extent.width,
+        .height = swapchain_extent.height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+    vkCmdSetViewport(swapchain_buffer.cmd, 0, 1, &viewport);
 
-        VkRect2D scissor = {
-            .offset = {0,0},
-            .extent = {swapchain_extent.width, swapchain_extent.height}
-        };
-        vkCmdSetScissor(swapchain_buffers[i].cmd, 0, 1, &scissor);
+    VkRect2D scissor = {
+        .offset = {0,0},
+        .extent = {swapchain_extent.width, swapchain_extent.height}
+    };
+    vkCmdSetScissor(swapchain_buffer.cmd, 0, 1, &scissor);
 
-        vkCmdBindPipeline(
-            swapchain_buffers[i].cmd,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipeline
-        );
+    vkCmdBindPipeline(
+        swapchain_buffer.cmd,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pipeline
+    );
 
-        VkDeviceSize offsets[] = {0};
+    VkDeviceSize offsets[] = {0};
+    while (!queue_empty(mesh_draw_queue)) {
+        struct renderer_mesh* mesh;
+        queue_dequeue(mesh_draw_queue, &mesh);
+        assert(mesh);
 
         vkCmdBindVertexBuffers(
-            swapchain_buffers[i].cmd,
+            swapchain_buffer.cmd,
             0,
             1,
-            &meshes[0].vbo->buffer,
+            &mesh->vbo->buffer,
             offsets
         );
 
         vkCmdBindIndexBuffer(
-            swapchain_buffers[i].cmd,
-            meshes[0].ibo->buffer,
+            swapchain_buffer.cmd,
+            mesh->ibo->buffer,
             0,
             VK_INDEX_TYPE_UINT32
         );
 
         uint32_t dynamic_offsets[1] = {0};
         vkCmdBindDescriptorSets(
-            swapchain_buffers[i].cmd,
+            swapchain_buffer.cmd,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
             pipeline_layout,
             0,
@@ -2142,22 +2112,20 @@ void renderer_record_draw_commands(
             dynamic_offsets
         );
 
-        for (uint32_t j = 0; j < mesh_count; j++) {
-            vkCmdDrawIndexed(
-                swapchain_buffers[i].cmd,
-                meshes[j].index_count,
-                1,
-                meshes[j].ibo_offset,
-                meshes[j].vbo_offset,
-                0
-            );
-        }
-
-        vkCmdEndRenderPass(swapchain_buffers[i].cmd);
-
-        result = vkEndCommandBuffer(swapchain_buffers[i].cmd);
-        assert(result == VK_SUCCESS);
+        vkCmdDrawIndexed(
+            swapchain_buffer.cmd,
+            mesh->index_count,
+            1,
+            mesh->ibo_offset,
+            mesh->vbo_offset,
+            0
+        );
     }
+
+    vkCmdEndRenderPass(swapchain_buffer.cmd);
+
+    result = vkEndCommandBuffer(swapchain_buffer.cmd);
+    assert(result == VK_SUCCESS);
 }
 
 VkSemaphore renderer_get_semaphore(
@@ -2183,7 +2151,7 @@ VkSemaphore renderer_get_semaphore(
     return semaphore_handle;
 }
 
-void drawFrame(struct renderer_resources* resources)
+void renderer_draw_frame(struct renderer_resources* resources)
 {
     renderer_update_dynamic_uniform_buffer(
         resources->device,
@@ -2393,18 +2361,17 @@ void renderer_resize(
         resources->image_count
     );
 
-    renderer_record_draw_commands(
+    /*renderer_record_draw_commands(
         resources->graphics_pipeline,
         resources->render_pass,
         resources->swapchain_extent,
         resources->framebuffers,
         resources->swapchain_buffers,
         resources->image_count,
-        2, // Mesh count
-        resources->meshes,
+        &resources->mesh_draw_queue,
         resources->pipeline_layout,
         &resources->descriptor_set
-    );
+    );*/
 }
 
 void renderer_destroy_resources(
@@ -2585,26 +2552,12 @@ void renderer_generate_meshes(
         total_index_count
     );
 
-    VkCommandBufferAllocateInfo cmd_alloc_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = NULL,
-        .commandPool = resources->command_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-        .commandBufferCount = 1
-    };
-
     for (uint32_t i = 0; i < model_count; i++) {
         resources->meshes[i].vbo = &resources->vbo;
         resources->meshes[i].vbo_offset = vertex_offsets[i];
         resources->meshes[i].ibo = &resources->ibo;
         resources->meshes[i].ibo_offset = index_offsets[i];
         resources->meshes[i].index_count = index_counts[i];
-
-        vkAllocateCommandBuffers(
-            resources->device,
-            &cmd_alloc_info,
-            &resources->meshes[i].cmd
-        );
     }
 
     free(total_indices);

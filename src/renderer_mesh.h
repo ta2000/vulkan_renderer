@@ -10,13 +10,15 @@ struct renderer_mesh
 {
     struct renderer_buffer* vbo;
     uint32_t vbo_offset;
+
     struct renderer_buffer* ibo;
     uint32_t ibo_offset;
     uint32_t index_count;
+
     struct renderer_buffer* uniform_buffer;
     uint32_t uniform_offset;
-    VkCommandBuffer cmd;
-    VkPipeline pipeline;
+
+    VkDescriptorSet descriptor_set;
 };
 
 void bind(struct renderer_mesh* mesh);

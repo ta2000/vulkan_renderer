@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 
 #include "linmath.h"
+#include "queue.h"
 
 #include <stdbool.h>
 
@@ -53,6 +54,7 @@ struct renderer_resources
     struct camera camera;
 
     struct renderer_mesh* meshes;
+    struct queue mesh_draw_queue;
 
     VkInstance instance;
 
@@ -308,14 +310,11 @@ struct renderer_buffer renderer_get_index_buffer(
 
 void renderer_record_draw_commands(
     VkPipeline pipeline,
-    //VkPipelineLayout pipeline_layout,
     VkRenderPass render_pass,
     VkExtent2D swapchain_extent,
-    VkFramebuffer* framebuffers,
-    struct renderer_swapchain_buffer* swapchain_buffers,
-    uint32_t swapchain_image_count,
-    uint32_t mesh_count,
-    struct renderer_mesh* meshes,
+    VkFramebuffer framebuffer,
+    struct renderer_swapchain_buffer swapchain_buffer,
+    struct queue* mesh_draw_queue,
     VkPipelineLayout pipeline_layout,
     VkDescriptorSet* descriptor_set
 );
@@ -324,7 +323,9 @@ VkSemaphore renderer_get_semaphore(
     VkDevice device
 );
 
-void drawFrame(struct renderer_resources* resources);
+void renderer_draw_frame(
+    struct renderer_resources* resources
+);
 
 void renderer_resize(
     struct renderer_resources* resources,

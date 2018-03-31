@@ -147,7 +147,7 @@ void game_update(struct game* game)
 
 void game_render(struct game* game)
 {
-    drawFrame(game->renderer_resources);
+    renderer_draw_frame(game->renderer_resources);
 }
 
 void game_resize(
