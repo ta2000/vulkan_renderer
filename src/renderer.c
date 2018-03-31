@@ -2345,24 +2345,14 @@ void renderer_resize(
         resources->framebuffers,
         resources->image_count
     );
-
-    /*renderer_record_draw_commands(
-        resources->graphics_pipeline,
-        resources->render_pass,
-        resources->swapchain_extent,
-        resources->framebuffers,
-        resources->swapchain_buffers,
-        resources->image_count,
-        &resources->mesh_draw_queue,
-        resources->pipeline_layout,
-        &resources->descriptor_set
-    );*/
 }
 
 void renderer_destroy_resources(
         struct renderer_resources* resources)
 {
     renderer_destroy_meshes(resources);
+
+    queue_destroy(&resources->mesh_draw_queue);
 
     vkDestroyImage(resources->device, resources->tex_image.image, NULL);
     vkDestroyImageView(
@@ -2507,9 +2497,11 @@ void renderer_generate_meshes(
 
     struct renderer_vertex* total_vertices;
     total_vertices = malloc(total_vertex_count * sizeof(*total_vertices));
+    assert(total_vertices);
 
     uint32_t* total_indices;
     total_indices = malloc(total_index_count * sizeof(*total_indices));
+    assert(total_indices);
 
     for (uint32_t i = 0; i < model_count; i++) {
         renderer_load_model(

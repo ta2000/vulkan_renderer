@@ -78,7 +78,7 @@ void game_run(struct game* game)
     renderer_initialize_resources(game->renderer_resources, window);
 
     const char* model_files[] = {
-        "assets/models/chalet.obj",
+        "assets/models/chalet.obj"
     };
     renderer_generate_meshes(
         game->renderer_resources,
