@@ -1,3 +1,4 @@
+#include "renderer_mesh.h"
 #include "renderer_buffer.h"
 #include "renderer_image.h"
 #include "renderer_tools.h"
@@ -58,6 +59,8 @@ void game_run(struct game* game)
 
     game->renderer_resources = malloc(sizeof(*game->renderer_resources));
 
+    game->draw_house = true;
+
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(
@@ -74,12 +77,31 @@ void game_run(struct game* game)
 
     renderer_initialize_resources(game->renderer_resources, window);
 
+    const char* model_files[] = {
+        "assets/models/chalet.obj"
+    };
+    renderer_generate_meshes(
+        game->renderer_resources,
+        model_files,
+        1
+    );
+
+    struct renderer_mesh* house_mesh = &game->renderer_resources->meshes[0];
+
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
         game_process_input(game);
         if (game->running) {
             game_update(game);
+
+            if (game->draw_house) {
+                queue_enqueue(
+                    &game->renderer_resources->mesh_draw_queue,
+                    &house_mesh
+                );
+            }
+
             game_render(game);
         }
 
@@ -128,6 +150,10 @@ void game_process_input(struct game* game)
             camera->pitch -= cam_speed;
         }
 
+        if (game->keys[GLFW_KEY_T] && !game->keys_prev[GLFW_KEY_T]) {
+            game->draw_house = !game->draw_house;
+        }
+
         camera->yaw += game->mouse.dx * sensitivity;
         camera->pitch += game->mouse.dy * sensitivity;
     }
@@ -147,7 +173,7 @@ void game_update(struct game* game)
 
 void game_render(struct game* game)
 {
-    drawFrame(game->renderer_resources);
+    renderer_draw_frame(game->renderer_resources);
 }
 
 void game_resize(
