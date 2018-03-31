@@ -245,32 +245,6 @@ void renderer_initialize_resources(
 
 	resources->image_available = renderer_get_semaphore(resources->device);
 	resources->render_finished = renderer_get_semaphore(resources->device);
-
-    const char* model_srcs[] = {
-        //"assets/models/robot.dae",
-        "assets/models/chalet.obj"
-    };
-    renderer_generate_meshes(
-        resources,
-        model_srcs,
-        1
-    );
-
-    struct renderer_mesh* test = &resources->meshes[0];
-
-    for (uint32_t i = 0; i < resources->image_count; i++) {
-        queue_enqueue(&resources->mesh_draw_queue, &test);
-        renderer_record_draw_commands(
-            resources->graphics_pipeline,
-            resources->render_pass,
-            resources->swapchain_extent,
-            resources->framebuffers[i],
-            resources->swapchain_buffers[i],
-            &resources->mesh_draw_queue,
-            resources->pipeline_layout,
-            &resources->descriptor_set
-        );
-    }
 }
 
 VkInstance renderer_get_instance()
@@ -1060,7 +1034,7 @@ VkCommandPool renderer_get_command_pool(
     VkCommandPoolCreateInfo command_pool_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .pNext = NULL,
-        .flags = 0,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = graphics_family_index
     };
 
@@ -2180,6 +2154,17 @@ void renderer_draw_frame(struct renderer_resources* resources)
         &image_index
     );
     assert(result == VK_SUCCESS);
+
+    renderer_record_draw_commands(
+        resources->graphics_pipeline,
+        resources->render_pass,
+        resources->swapchain_extent,
+        resources->framebuffers[image_index],
+        resources->swapchain_buffers[image_index],
+        &resources->mesh_draw_queue,
+        resources->pipeline_layout,
+        &resources->descriptor_set
+    );
 
     VkSemaphore wait_semaphores[] = {resources->image_available};
     VkSemaphore signal_semaphores[] = {resources->render_finished};
