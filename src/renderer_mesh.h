@@ -13,10 +13,6 @@ struct renderer_mesh
     struct renderer_buffer* ibo;
     uint32_t ibo_offset;
     uint32_t index_count;
-    VkCommandBuffer cmd;
-    VkPipeline pipeline;
 };
-
-void bind(struct renderer_mesh* mesh);
 
 #endif

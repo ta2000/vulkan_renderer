@@ -133,7 +133,7 @@ struct renderer_image renderer_get_sampled_image(
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .mipLodBias =0.0f,
-        .anisotropyEnable = VK_TRUE,
+        .anisotropyEnable = VK_FALSE,
         .maxAnisotropy = 1.0f,
         .compareEnable = VK_FALSE,
         .compareOp = VK_COMPARE_OP_ALWAYS,
@@ -329,6 +329,7 @@ struct renderer_image renderer_load_texture(
         physical_device,
         device,
         image_size,
+        0,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT

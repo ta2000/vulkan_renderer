@@ -16,8 +16,25 @@ struct renderer_buffer renderer_get_buffer(
     VkPhysicalDevice physical_device,
     VkDevice device,
     VkDeviceSize size,
+    VkDeviceSize offset,
     VkBufferUsageFlags usage,
     VkMemoryPropertyFlags memory_flags
+);
+
+void renderer_destroy_buffer(
+    VkDevice device,
+    struct renderer_buffer* buffer
+);
+
+void renderer_map_buffer(
+    VkDevice device,
+    VkDeviceSize offset,
+    struct renderer_buffer* buffer
+);
+
+void renderer_unmap_buffer(
+    VkDevice device,
+    struct renderer_buffer* buffer
 );
 
 void renderer_copy_buffer_to_buffer(

@@ -7,6 +7,7 @@ struct renderer_buffer renderer_get_buffer(
         VkPhysicalDevice physical_device,
         VkDevice device,
         VkDeviceSize size,
+        VkDeviceSize offset,
         VkBufferUsageFlags usage,
         VkMemoryPropertyFlags memory_flags)
 {
@@ -56,10 +57,49 @@ struct renderer_buffer renderer_get_buffer(
         device,
         buffer.buffer,
         buffer.memory,
-        0
+        offset
     );
 
     return buffer;
+}
+
+void renderer_destroy_buffer(
+        VkDevice device,
+        struct renderer_buffer* buffer)
+{
+    vkFreeMemory(device, buffer->memory, NULL);
+    vkDestroyBuffer(device, buffer->buffer, NULL);
+}
+
+void renderer_map_buffer(
+        VkDevice device,
+        VkDeviceSize offset,
+        struct renderer_buffer* buffer)
+{
+    VkResult result;
+    result = vkMapMemory(
+        device,
+        buffer->memory,
+        offset,
+        buffer->size,
+        0,
+        &buffer->mapped
+    );
+    assert(result == VK_SUCCESS);
+}
+
+void renderer_unmap_buffer(
+    VkDevice device,
+    struct renderer_buffer* buffer)
+{
+    VkResult result;
+    vkUnmapMemory(
+        device,
+        buffer->memory
+    );
+    assert(result == VK_SUCCESS);
+
+    buffer->mapped = NULL;
 }
 
 void renderer_copy_buffer_to_buffer(

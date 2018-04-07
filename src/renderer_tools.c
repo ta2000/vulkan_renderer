@@ -1,6 +1,7 @@
 #include "renderer_tools.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
 
@@ -61,4 +62,12 @@ uint32_t renderer_find_memory_type(
     assert(memory_type_found);
 
     return memory_type;
+}
+
+void* aligned_alloc(size_t alignment, size_t size)
+{
+    void* ptr = NULL;
+    // TODO: add windows equivalent
+    posix_memalign(&ptr, alignment, size);
+    return ptr;
 }

@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 
 #include "linmath.h"
+#include "queue.h"
 
 #include <stdbool.h>
 
@@ -25,6 +26,7 @@
 // updated)
 // - Use one command buffer for all transfer command stuff created at beginning
 // - Update uniform buffer on resize while paused
+// - Remove glfwGetWindowSize for swapchain image size
 
 struct camera
 {
@@ -36,13 +38,6 @@ struct renderer_vertex
 {
     float x, y, z;
     float u, v;
-};
-
-struct renderer_ubo
-{
-    mat4x4 model;
-    mat4x4 view;
-    mat4x4 projection;
 };
 
 struct renderer_swapchain_buffer
@@ -59,6 +54,7 @@ struct renderer_resources
     struct camera camera;
 
     struct renderer_mesh* meshes;
+    struct queue mesh_draw_queue;
 
     VkInstance instance;
 
@@ -94,8 +90,14 @@ struct renderer_resources
     VkDescriptorPool descriptor_pool;
     VkDescriptorSetLayout descriptor_layout;
     VkDescriptorSet descriptor_set;
-    struct renderer_buffer uniform_buffer;
-    struct renderer_ubo ubo;
+
+    struct renderer_image tex_image;
+
+    struct renderer_buffer dynamic_uniform_buffer;
+    struct renderer_buffer view_projection_uniform_buffer;
+    mat4x4 model_matrix;
+    mat4x4 view_matrix;
+    mat4x4 projection_matrix;
 
     VkRenderPass render_pass;
 
@@ -107,8 +109,6 @@ struct renderer_resources
     struct renderer_buffer vbo;
     struct renderer_buffer ibo;
     uint32_t index_count;
-
-    struct renderer_image tex_image;
 
     VkSemaphore image_available;
     VkSemaphore render_finished;
@@ -232,15 +232,22 @@ VkDescriptorSet renderer_get_descriptor_set(
     VkDescriptorPool descriptor_pool,
     VkDescriptorSetLayout* descriptor_layouts,
     uint32_t descriptor_count,
-    struct renderer_buffer* uniform_buffer,
+    struct renderer_buffer* uniform_buffer_instance,
+    struct renderer_buffer* uniform_buffer_view,
     struct renderer_image* tex_image
 );
 
-void renderer_update_uniform_buffer(
+void renderer_update_dynamic_uniform_buffer(
     VkDevice device,
+    struct renderer_buffer* uniform_buffer_instance,
+    mat4x4 model_matrix
+);
+
+void renderer_update_view_projection_uniform_buffer(
     VkExtent2D swapchain_extent,
     struct renderer_buffer* uniform_buffer,
-    struct renderer_ubo* ubo,
+    mat4x4 view_matrix,
+    mat4x4 projection_matrix,
     struct camera camera,
     vec3 target
 );
@@ -303,25 +310,22 @@ struct renderer_buffer renderer_get_index_buffer(
 
 void renderer_record_draw_commands(
     VkPipeline pipeline,
-    //VkPipelineLayout pipeline_layout,
     VkRenderPass render_pass,
     VkExtent2D swapchain_extent,
-    VkFramebuffer* framebuffers,
-    struct renderer_swapchain_buffer* swapchain_buffers,
-    uint32_t swapchain_image_count,
-    struct renderer_buffer vertex_buffer,
-    struct renderer_buffer index_buffer,
-    uint32_t index_count,
+    VkFramebuffer framebuffer,
+    struct renderer_swapchain_buffer swapchain_buffer,
+    struct queue* mesh_draw_queue,
     VkPipelineLayout pipeline_layout,
     VkDescriptorSet* descriptor_set
-    //struct renderer_mesh* mesh
 );
 
 VkSemaphore renderer_get_semaphore(
     VkDevice device
 );
 
-void drawFrame(struct renderer_resources* resources);
+void renderer_draw_frame(
+    struct renderer_resources* resources
+);
 
 void renderer_resize(
     struct renderer_resources* resources,
