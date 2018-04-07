@@ -329,6 +329,7 @@ struct renderer_image renderer_load_texture(
         physical_device,
         device,
         image_size,
+        0,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT

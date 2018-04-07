@@ -7,6 +7,7 @@ struct renderer_buffer renderer_get_buffer(
         VkPhysicalDevice physical_device,
         VkDevice device,
         VkDeviceSize size,
+        VkDeviceSize offset,
         VkBufferUsageFlags usage,
         VkMemoryPropertyFlags memory_flags)
 {
@@ -56,7 +57,7 @@ struct renderer_buffer renderer_get_buffer(
         device,
         buffer.buffer,
         buffer.memory,
-        0
+        offset
     );
 
     return buffer;

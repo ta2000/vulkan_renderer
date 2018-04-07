@@ -160,10 +160,17 @@ void renderer_initialize_resources(
         resources->device
     );
 
+    /*VkPhysicalDeviceProperties gpu_props;
+    vkGetPhysicalDeviceProperties(resources->physical_device, &gpu_props);
+
+    VkDeviceSize min_ubo_offset;
+    min_ubo_offset = gpu_props.limits.minUniformBufferOffsetAlignment;*/
+
     resources->dynamic_uniform_buffer = renderer_get_buffer(
         resources->physical_device,
         resources->device,
         sizeof(mat4x4),
+        0,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -173,6 +180,7 @@ void renderer_initialize_resources(
         resources->physical_device,
         resources->device,
         sizeof(mat4x4) * 2,
+        0,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
     );
@@ -1902,6 +1910,7 @@ struct renderer_buffer renderer_get_vertex_buffer(
         physical_device,
         device,
         mem_size,
+        0,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -1915,6 +1924,7 @@ struct renderer_buffer renderer_get_vertex_buffer(
         physical_device,
         device,
         mem_size,
+        0,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT |
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -1952,6 +1962,7 @@ struct renderer_buffer renderer_get_index_buffer(
         physical_device,
         device,
         mem_size,
+        0,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -1965,6 +1976,7 @@ struct renderer_buffer renderer_get_index_buffer(
         physical_device,
         device,
         mem_size,
+        0,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT |
         VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -2552,8 +2564,6 @@ void renderer_destroy_meshes(
 
     vkDestroyBuffer(resources->device, resources->ibo.buffer, NULL);
     vkFreeMemory(resources->device, resources->ibo.memory, NULL);
-
-    // Command buffer destroyed with pool
 }
 
 void renderer_get_model_vertex_count(
