@@ -23,7 +23,8 @@ void queue_enqueue(struct queue* queue, void* value)
     memcpy(queue->end, value, queue->element_size);
     queue->end += queue->element_size;
 
-    if (queue->end > queue->data + queue->element_size * queue->max_elements) {
+    if (queue->end >
+            (queue->data + (queue->element_size * queue->max_elements))) {
         queue->end = queue->data;
     }
 }

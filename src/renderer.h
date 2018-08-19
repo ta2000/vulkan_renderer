@@ -47,6 +47,12 @@ struct renderer_swapchain_buffer
     VkCommandBuffer cmd;
 };
 
+struct renderer_draw_command
+{
+    struct renderer_mesh* mesh;
+    VkDescriptorSet* descriptor_set;
+};
+
 struct renderer_resources
 {
     GLFWwindow* window;
@@ -54,7 +60,7 @@ struct renderer_resources
     struct camera camera;
 
     struct renderer_mesh* meshes;
-    struct queue mesh_draw_queue;
+    struct queue draw_command_queue;
 
     VkInstance instance;
 
@@ -314,7 +320,7 @@ void renderer_record_draw_commands(
     VkExtent2D swapchain_extent,
     VkFramebuffer framebuffer,
     struct renderer_swapchain_buffer swapchain_buffer,
-    struct queue* mesh_draw_queue,
+    struct queue* draw_command_queue,
     VkPipelineLayout pipeline_layout,
     VkDescriptorSet* descriptor_set
 );
@@ -357,6 +363,13 @@ void renderer_load_model(
     const char* src,
     struct renderer_vertex* vertices,
     uint32_t* indices
+);
+
+void renderer_draw(
+    struct renderer_resources* resources,
+    struct renderer_mesh* mesh,
+    struct renderer_image* texture,
+    float x, float y, float z
 );
 
 #endif

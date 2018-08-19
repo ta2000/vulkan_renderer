@@ -255,3 +255,20 @@ void renderer_copy_buffer_to_image(
         &copy_cmd
     );
 }
+
+size_t renderer_get_buffer_alignment(
+        VkPhysicalDevice physical_device,
+        size_t element_size)
+{
+    VkPhysicalDeviceProperties gpu_props;
+    vkGetPhysicalDeviceProperties(physical_device, &gpu_props);
+
+    VkDeviceSize min_offset;
+    min_offset = gpu_props.limits.minUniformBufferOffsetAlignment;
+    size_t alignment = element_size;
+
+    if (min_offset > 0)
+        alignment = (element_size + min_offset - 1) & ~(min_offset - 1);
+
+    return alignment;
+}

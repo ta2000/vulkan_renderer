@@ -96,10 +96,8 @@ void game_run(struct game* game)
             game_update(game);
 
             if (game->draw_house) {
-                queue_enqueue(
-                    &game->renderer_resources->mesh_draw_queue,
-                    &house_mesh
-                );
+                renderer_draw(game->renderer_resources,
+                        house_mesh, NULL, 0.0f, 0.0f, 0.0f);
             }
 
             game_render(game);

@@ -55,4 +55,9 @@ void renderer_copy_buffer_to_image(
     VkExtent3D extent
 );
 
+size_t renderer_get_buffer_alignment(
+    VkPhysicalDevice physical_device,
+    size_t element_size
+);
+
 #endif

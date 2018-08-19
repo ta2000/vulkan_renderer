@@ -26,7 +26,9 @@ void renderer_initialize_resources(
 
     resources->meshes = malloc(10 * sizeof(*resources->meshes));
 
-    queue_init(&resources->mesh_draw_queue, sizeof(resources->meshes), 6);
+    queue_init(&resources->draw_command_queue,
+                sizeof(struct renderer_draw_command),
+                6);
 
     resources->instance = renderer_get_instance();
 
@@ -2003,7 +2005,7 @@ void renderer_record_draw_commands(
         VkExtent2D swapchain_extent,
         VkFramebuffer framebuffer,
         struct renderer_swapchain_buffer swapchain_buffer,
-        struct queue* mesh_draw_queue,
+        struct queue* draw_command_queue,
         VkPipelineLayout pipeline_layout,
         VkDescriptorSet* descriptor_sets)
 {
@@ -2066,9 +2068,11 @@ void renderer_record_draw_commands(
     );
 
     VkDeviceSize offsets[] = {0};
-    while (!queue_empty(mesh_draw_queue)) {
-        struct renderer_mesh* mesh;
-        queue_dequeue(mesh_draw_queue, &mesh);
+    while (!queue_empty(draw_command_queue)) {
+        struct renderer_draw_command draw_command;
+        queue_dequeue(draw_command_queue, &draw_command);
+
+        struct renderer_mesh* mesh = draw_command.mesh;
         assert(mesh);
 
         vkCmdBindVertexBuffers(
@@ -2173,7 +2177,7 @@ void renderer_draw_frame(struct renderer_resources* resources)
         resources->swapchain_extent,
         resources->framebuffers[image_index],
         resources->swapchain_buffers[image_index],
-        &resources->mesh_draw_queue,
+        &resources->draw_command_queue,
         resources->pipeline_layout,
         &resources->descriptor_set
     );
@@ -2364,7 +2368,7 @@ void renderer_destroy_resources(
 {
     renderer_destroy_meshes(resources);
 
-    queue_destroy(&resources->mesh_draw_queue);
+    queue_destroy(&resources->draw_command_queue);
 
     vkDestroyImage(resources->device, resources->tex_image.image, NULL);
     vkDestroyImageView(
@@ -2618,4 +2622,18 @@ void renderer_load_model(
     }
 
     aiReleaseImport(scene);
+}
+
+void renderer_draw(
+        struct renderer_resources* resources,
+        struct renderer_mesh* mesh,
+        struct renderer_image* texture,
+        float x, float y, float z)
+{
+    struct renderer_draw_command draw_command = {
+        .mesh = mesh,
+        .descriptor_set = NULL
+    };
+
+    queue_enqueue(&resources->draw_command_queue, &draw_command);
 }
