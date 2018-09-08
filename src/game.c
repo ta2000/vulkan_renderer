@@ -98,6 +98,9 @@ void game_run(struct game* game)
             if (game->draw_house) {
                 renderer_draw(game->renderer_resources,
                         house_mesh, NULL, 0.0f, 0.0f, 0.0f);
+
+                renderer_draw(game->renderer_resources,
+                        house_mesh, NULL, 2.0f, 0.0f, 0.0f);
             }
 
             game_render(game);

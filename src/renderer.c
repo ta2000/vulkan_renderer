@@ -26,7 +26,7 @@ void renderer_initialize_resources(
 
     resources->meshes = malloc(10 * sizeof(*resources->meshes));
 
-    queue_init(&resources->draw_command_queue,
+    queue_init(&resources->drawable_queue,
                 sizeof(struct renderer_draw_command),
                 6);
 
@@ -2005,19 +2005,19 @@ void renderer_record_draw_commands(
         VkExtent2D swapchain_extent,
         VkFramebuffer framebuffer,
         struct renderer_swapchain_buffer swapchain_buffer,
-        struct queue* draw_command_queue,
+        struct queue* drawable_queue,
         VkPipelineLayout pipeline_layout,
         VkDescriptorSet* descriptor_sets)
 {
     VkCommandBufferBeginInfo cmd_begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .pNext = NULL,
-        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = NULL
     };
 
     VkClearValue clear_values[] = {
-        {.color.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
+        {.color.float32 = {0.2f, 0.2f, 0.2f, 1.0f}},
         {.depthStencil = {1.0f, 0}}
     };
 
@@ -2042,10 +2042,10 @@ void renderer_record_draw_commands(
     vkCmdBeginRenderPass(
         swapchain_buffer.cmd,
         &render_pass_info,
-        VK_SUBPASS_CONTENTS_INLINE
+        VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
     );
 
-    VkViewport viewport = {
+    /*VkViewport viewport = {
         .x = 0,
         .y = 0,
         .width = swapchain_extent.width,
@@ -2059,56 +2059,22 @@ void renderer_record_draw_commands(
         .offset = {0,0},
         .extent = {swapchain_extent.width, swapchain_extent.height}
     };
-    vkCmdSetScissor(swapchain_buffer.cmd, 0, 1, &scissor);
+    vkCmdSetScissor(swapchain_buffer.cmd, 0, 1, &scissor);*/
 
-    vkCmdBindPipeline(
+    /*vkCmdBindPipeline(
         swapchain_buffer.cmd,
         VK_PIPELINE_BIND_POINT_GRAPHICS,
         pipeline
-    );
+    );*/
 
-    VkDeviceSize offsets[] = {0};
-    while (!queue_empty(draw_command_queue)) {
-        struct renderer_draw_command draw_command;
-        queue_dequeue(draw_command_queue, &draw_command);
+    while (!queue_empty(drawable_queue)) {
+        struct renderer_drawable drawable;
+        queue_dequeue(drawable_queue, &drawable);
 
-        struct renderer_mesh* mesh = draw_command.mesh;
-        assert(mesh);
-
-        vkCmdBindVertexBuffers(
+        vkCmdExecuteCommands(
             swapchain_buffer.cmd,
-            0,
             1,
-            &mesh->vbo->buffer,
-            offsets
-        );
-
-        vkCmdBindIndexBuffer(
-            swapchain_buffer.cmd,
-            mesh->ibo->buffer,
-            0,
-            VK_INDEX_TYPE_UINT32
-        );
-
-        uint32_t dynamic_offsets[1] = {0};
-        vkCmdBindDescriptorSets(
-            swapchain_buffer.cmd,
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            pipeline_layout,
-            0,
-            1,
-            descriptor_sets,
-            1,
-            dynamic_offsets
-        );
-
-        vkCmdDrawIndexed(
-            swapchain_buffer.cmd,
-            mesh->index_count,
-            1,
-            mesh->ibo_offset,
-            mesh->vbo_offset,
-            0
+            &drawable.cmd
         );
     }
 
@@ -2177,7 +2143,7 @@ void renderer_draw_frame(struct renderer_resources* resources)
         resources->swapchain_extent,
         resources->framebuffers[image_index],
         resources->swapchain_buffers[image_index],
-        &resources->draw_command_queue,
+        &resources->drawable_queue,
         resources->pipeline_layout,
         &resources->descriptor_set
     );
@@ -2368,7 +2334,7 @@ void renderer_destroy_resources(
 {
     renderer_destroy_meshes(resources);
 
-    queue_destroy(&resources->draw_command_queue);
+    queue_destroy(&resources->drawable_queue);
 
     vkDestroyImage(resources->device, resources->tex_image.image, NULL);
     vkDestroyImageView(
@@ -2632,8 +2598,102 @@ void renderer_draw(
 {
     struct renderer_draw_command draw_command = {
         .mesh = mesh,
-        .descriptor_set = NULL
+        .texture = texture
     };
 
-    queue_enqueue(&resources->draw_command_queue, &draw_command);
+    /*
+     * - Game submits model and texture to be drawn
+     * - Renderer creates secondary CB for mesh/descriptor (if !exists)
+     * - Secondary CB stored in hash table for fast lookup, no duplicates of
+     *   model/texture combination
+     * -
+     */
+
+    struct renderer_drawable drawable;
+
+    VkCommandBufferAllocateInfo cmd_alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = resources->command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+        .commandBufferCount = 1
+    };
+
+    VkResult result = vkAllocateCommandBuffers(
+        resources->device,
+        &cmd_alloc_info,
+        &drawable.cmd
+    );
+    assert(result == VK_SUCCESS);
+
+    VkCommandBufferInheritanceInfo inheritance_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .pNext = NULL,
+        .renderPass = resources->render_pass,
+        .subpass = 0,
+        .framebuffer = VK_NULL_HANDLE,
+        //.framebuffer = framebuffer,
+        .occlusionQueryEnable = VK_FALSE,
+        .queryFlags = 0,
+        .pipelineStatistics = 0
+    };
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT,
+        .pInheritanceInfo = &inheritance_info
+    };
+
+    vkBeginCommandBuffer(
+        drawable.cmd,
+        &begin_info
+    );
+
+    vkCmdBindPipeline(
+        drawable.cmd,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        resources->graphics_pipeline
+    );
+
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(
+        drawable.cmd,
+        0,
+        1,
+        &mesh->vbo->buffer,
+        offsets
+    );
+
+    vkCmdBindIndexBuffer(
+        drawable.cmd,
+        mesh->ibo->buffer,
+        0,
+        VK_INDEX_TYPE_UINT32
+    );
+
+    uint32_t dynamic_offsets[1] = {0};
+    vkCmdBindDescriptorSets(
+        drawable.cmd,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        resources->pipeline_layout,
+        0,
+        1,
+        &resources->descriptor_set,
+        1,
+        dynamic_offsets
+    );
+
+    vkCmdDrawIndexed(
+        drawable.cmd,
+        mesh->index_count,
+        1,
+        mesh->ibo_offset,
+        mesh->vbo_offset,
+        0
+    );
+
+    vkEndCommandBuffer(drawable.cmd);
+
+    queue_enqueue(&resources->drawable_queue, &drawable);
 }
