@@ -86,6 +86,14 @@ void game_run(struct game* game)
         1
     );
 
+    struct renderer_drawable test_drawable;
+    renderer_create_drawable(
+        game->renderer_resources,
+        "assets/models/chalet.obj",
+        "texture_src",
+        &test_drawable
+    );
+
     struct renderer_mesh* house_mesh = &game->renderer_resources->meshes[0];
 
     while(!glfwWindowShouldClose(window)) {
@@ -96,11 +104,11 @@ void game_run(struct game* game)
             game_update(game);
 
             if (game->draw_house) {
-                renderer_draw(game->renderer_resources,
-                        house_mesh, NULL, 0.0f, 0.0f, 0.0f);
-
-                renderer_draw(game->renderer_resources,
-                        house_mesh, NULL, 2.0f, 0.0f, 0.0f);
+                renderer_draw(
+                    game->renderer_resources,
+                    &test_drawable,
+                    0.0f, 0.0f, 0.0f
+                );
             }
 
             game_render(game);

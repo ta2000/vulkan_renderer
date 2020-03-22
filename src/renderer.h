@@ -28,8 +28,6 @@
 // - Update uniform buffer on resize while paused
 // - Remove glfwGetWindowSize for swapchain image size
 
-typedef uint16_t MODEL_MATRIX;
-
 struct camera
 {
     float x, y, z;
@@ -51,15 +49,18 @@ struct renderer_swapchain_buffer
 
 struct renderer_draw_command
 {
-    struct renderer_mesh* mesh;
-    struct renderer_image* texture;
+    struct drawable *drawable;
+    float x, y, z;
 };
 
 struct renderer_drawable
 {
+    struct renderer_mesh *mesh;
+    struct renderer_image *texture;
     VkCommandBuffer cmd;
-    VkDescriptorSet* descriptor_set;
-    MODEL_MATRIX matrix;
+    VkDescriptorSet descriptor_set;
+    int matrix_index; // Index into uniform buffer for transformation matrix
+    bool updated; // Let's draw code know if cmd buffer must be recorded
 };
 
 struct renderer_resources
@@ -375,10 +376,16 @@ void renderer_load_model(
 );
 
 void renderer_draw(
-    struct renderer_resources* resources,
-    struct renderer_mesh* mesh,
-    struct renderer_image* texture,
+    struct renderer_resources *resources,
+    struct renderer_drawable *drawable,
     float x, float y, float z
+);
+
+void renderer_create_drawable(
+    struct renderer_resources *resources,
+    const char *model_src,
+    const char *texture_src,
+    struct renderer_drawable *drawable
 );
 
 #endif
