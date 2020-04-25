@@ -16,6 +16,8 @@
 #define APP_VERSION_MINOR 0
 #define APP_VERSION_PATCH 0
 
+#define MAX_FRAMEBUFFERS 3
+
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -57,10 +59,10 @@ struct renderer_drawable
 {
     struct renderer_mesh *mesh;
     struct renderer_image *texture;
-    VkCommandBuffer cmd;
+    VkCommandBuffer cmd[MAX_FRAMEBUFFERS];
     VkDescriptorSet descriptor_set;
     int matrix_index; // Index into uniform buffer for transformation matrix
-    bool updated; // Let's draw code know if cmd buffer must be recorded
+    bool updated[MAX_FRAMEBUFFERS]; // This drawable cmd must be updated
 };
 
 struct renderer_resources
@@ -328,11 +330,12 @@ void renderer_record_draw_commands(
     VkPipeline pipeline,
     VkRenderPass render_pass,
     VkExtent2D swapchain_extent,
-    VkFramebuffer framebuffer,
+    VkFramebuffer *framebuffers,
+    uint32_t image_index,
     struct renderer_swapchain_buffer swapchain_buffer,
-    struct queue* drawable_queue,
+    struct queue *drawable_queue,
     VkPipelineLayout pipeline_layout,
-    VkDescriptorSet* descriptor_set
+    VkDescriptorSet *descriptor_set
 );
 
 VkSemaphore renderer_get_semaphore(

@@ -111,6 +111,7 @@ void renderer_initialize_resources(
         resources->device,
         resources->swapchain
     );
+    //printf("%d\n", resources->image_count);
 
     resources->command_pool = renderer_get_command_pool(
         resources->physical_device,
@@ -285,7 +286,7 @@ VkInstance renderer_get_instance()
     create_info.pApplicationInfo = &app_info;
 
     // Validation layers
-    const char* enabled_layers[] = {"VK_LAYER_LUNARG_standard_validation"};
+    const char* enabled_layers[] = {"VK_LAYER_KHRONOS_validation"};
     uint32_t enabled_layer_count = 1;
 
     VkLayerProperties* available_layers;
@@ -303,6 +304,11 @@ VkInstance renderer_get_instance()
         &available_layer_count,
         available_layers
     );
+
+    /*printf("Available layers:\n");
+    for (uint32_t i = 0; i < available_layer_count; i++) {
+        printf("%s\n", available_layers[i].layerName);
+    }*/
 
     bool layer_found = true;
     for (uint32_t i = 0; i < enabled_layer_count; i++) {
@@ -2003,12 +2009,16 @@ void renderer_record_draw_commands(
         VkPipeline pipeline,
         VkRenderPass render_pass,
         VkExtent2D swapchain_extent,
-        VkFramebuffer framebuffer,
+        VkFramebuffer *framebuffers,
+        uint32_t image_index,
         struct renderer_swapchain_buffer swapchain_buffer,
-        struct queue* drawable_queue,
+        struct queue *drawable_queue,
         VkPipelineLayout pipeline_layout,
-        VkDescriptorSet* descriptor_sets)
+        VkDescriptorSet *descriptor_sets)
 {
+    // TODO: move all these structures somewhere permanent so they're not
+    // being created every frame
+
     // Primary cmd buffer
     VkCommandBufferBeginInfo cmd_begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -2040,7 +2050,7 @@ void renderer_record_draw_commands(
         .pClearValues = clear_values,
     };
 
-    render_pass_info.framebuffer = framebuffer;
+    render_pass_info.framebuffer = framebuffers[image_index];
     vkCmdBeginRenderPass(
         swapchain_buffer.cmd,
         &render_pass_info,
@@ -2075,7 +2085,7 @@ void renderer_record_draw_commands(
         .pNext = NULL,
         .renderPass = render_pass,
         .subpass = 0,
-        .framebuffer = framebuffer,
+        .framebuffer = framebuffers[image_index],
         .occlusionQueryEnable = VK_FALSE,
         .queryFlags = 0,
         .pipelineStatistics = 0
@@ -2092,29 +2102,29 @@ void renderer_record_draw_commands(
     // Record secondary command buffers
     while (!queue_empty(drawable_queue)) {
         struct renderer_draw_command draw_command;
-        printf("Dequeing draw command\n");
         queue_dequeue(drawable_queue, &draw_command);
 
         struct renderer_drawable *drawable = draw_command.drawable;
 
-        if (drawable->cmd == VK_NULL_HANDLE || drawable->updated) {
-            printf("Updating drawable\n");
-            drawable->updated = false;
+        if (drawable->updated[image_index]) {
+            printf("Updating drawable for framebuffer %d\n", image_index);
+            drawable->updated[image_index] = false;
 
+            inheritance_info.framebuffer = framebuffers[image_index];
             vkBeginCommandBuffer(
-                drawable->cmd,
+                drawable->cmd[image_index],
                 &begin_info
             );
 
             vkCmdBindPipeline(
-                drawable->cmd,
+                drawable->cmd[image_index],
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipeline
             );
 
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(
-                drawable->cmd,
+                drawable->cmd[image_index],
                 0,
                 1,
                 &(drawable->mesh->vbo->buffer),
@@ -2122,7 +2132,7 @@ void renderer_record_draw_commands(
             );
 
             vkCmdBindIndexBuffer(
-                drawable->cmd,
+                drawable->cmd[image_index],
                 drawable->mesh->ibo->buffer,
                 0,
                 VK_INDEX_TYPE_UINT32
@@ -2130,7 +2140,7 @@ void renderer_record_draw_commands(
 
             uint32_t dynamic_offsets[1] = {0};
             vkCmdBindDescriptorSets(
-                drawable->cmd,
+                drawable->cmd[image_index],
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipeline_layout,
                 0,
@@ -2141,7 +2151,7 @@ void renderer_record_draw_commands(
             );
 
             vkCmdDrawIndexed(
-                drawable->cmd,
+                drawable->cmd[image_index],
                 drawable->mesh->index_count,
                 1,
                 drawable->mesh->ibo_offset,
@@ -2149,13 +2159,13 @@ void renderer_record_draw_commands(
                 0
             );
 
-            vkEndCommandBuffer(drawable->cmd);
+            vkEndCommandBuffer(drawable->cmd[image_index]);
         }
 
         vkCmdExecuteCommands(
             swapchain_buffer.cmd,
             1,
-            &(drawable->cmd)
+            &(drawable->cmd[image_index])
         );
     }
 
@@ -2222,7 +2232,8 @@ void renderer_draw_frame(struct renderer_resources* resources)
         resources->graphics_pipeline,
         resources->render_pass,
         resources->swapchain_extent,
-        resources->framebuffers[image_index],
+        resources->framebuffers,
+        image_index,
         resources->swapchain_buffers[image_index],
         &resources->drawable_queue,
         resources->pipeline_layout,
@@ -2702,11 +2713,14 @@ void renderer_create_drawable(
         .pNext = NULL,
         .commandPool = resources->command_pool,
         .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-        .commandBufferCount = 1
+        .commandBufferCount = MAX_FRAMEBUFFERS
     };
     vkAllocateCommandBuffers(resources->device, &alloc_info, &drawable->cmd);
 
     drawable->descriptor_set = VK_NULL_HANDLE; // same reason as above
     drawable->matrix_index = 9;
-    drawable->updated = true; // Let renderer know to record this drawable
+
+    for (int i = 0; i < MAX_FRAMEBUFFERS; i++) {
+        drawable->updated[i] = true;
+    }
 }
