@@ -51,7 +51,7 @@ struct renderer_swapchain_buffer
 
 struct renderer_draw_command
 {
-    struct drawable *drawable;
+    struct renderer_drawable *drawable;
     float x, y, z;
 };
 
@@ -116,6 +116,7 @@ struct renderer_resources
     mat4x4 model_matrix;
     mat4x4 view_matrix;
     mat4x4 projection_matrix;
+    mat4x4 view_proj_matrix; // Computed before being passed to shader
 
     VkRenderPass render_pass;
 
@@ -248,11 +249,11 @@ VkDescriptorSetLayout renderer_get_descriptor_layout(
 VkDescriptorSet renderer_get_descriptor_set(
     VkDevice device,
     VkDescriptorPool descriptor_pool,
-    VkDescriptorSetLayout* descriptor_layouts,
+    VkDescriptorSetLayout *descriptor_layouts,
     uint32_t descriptor_count,
-    struct renderer_buffer* uniform_buffer_instance,
-    struct renderer_buffer* uniform_buffer_view,
-    struct renderer_image* tex_image
+    struct renderer_buffer *uniform_buffer_view,
+    struct renderer_buffer *dynamic_uniform_buffer,
+    struct renderer_image *tex_image
 );
 
 void renderer_update_dynamic_uniform_buffer(
@@ -266,6 +267,7 @@ void renderer_update_view_projection_uniform_buffer(
     struct renderer_buffer* uniform_buffer,
     mat4x4 view_matrix,
     mat4x4 projection_matrix,
+    mat4x4 view_proj_matrix,
     struct camera camera,
     vec3 target
 );

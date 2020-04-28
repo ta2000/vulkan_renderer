@@ -182,7 +182,7 @@ void renderer_initialize_resources(
     resources->view_projection_uniform_buffer = renderer_get_buffer(
         resources->physical_device,
         resources->device,
-        sizeof(mat4x4) * 2,
+        sizeof(resources->view_proj_matrix),
         0,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
@@ -206,8 +206,8 @@ void renderer_initialize_resources(
         resources->descriptor_pool,
         &resources->descriptor_layout,
         1,
-        &resources->dynamic_uniform_buffer,
         &resources->view_projection_uniform_buffer,
+        &resources->dynamic_uniform_buffer,
         &resources->tex_image
     );
 
@@ -216,6 +216,7 @@ void renderer_initialize_resources(
         &resources->view_projection_uniform_buffer,
         resources->view_matrix,
         resources->projection_matrix,
+        resources->view_proj_matrix,
         resources->camera,
         NULL
     );
@@ -1209,12 +1210,12 @@ VkDescriptorPool renderer_get_descriptor_pool(
     descriptor_pool_handle = VK_NULL_HANDLE;
 
     VkDescriptorPoolSize dynamic_uniform_buffer_pool_size = {
-        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1
     };
 
     VkDescriptorPoolSize view_projection_uniform_buffer_pool_size = {
-        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
         .descriptorCount = 1
     };
 
@@ -1224,8 +1225,8 @@ VkDescriptorPool renderer_get_descriptor_pool(
     };
 
     VkDescriptorPoolSize pool_sizes[] = {
-        dynamic_uniform_buffer_pool_size,
         view_projection_uniform_buffer_pool_size,
+        dynamic_uniform_buffer_pool_size,
         sampler_pool_size
     };
 
@@ -1258,7 +1259,7 @@ VkDescriptorSetLayout renderer_get_descriptor_layout(
 
     VkDescriptorSetLayoutBinding dynamic_ubo_layout_binding = {
         .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .pImmutableSamplers = NULL
@@ -1266,7 +1267,7 @@ VkDescriptorSetLayout renderer_get_descriptor_layout(
 
     VkDescriptorSetLayoutBinding view_projection_ubo_layout_binding = {
         .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
         .pImmutableSamplers = NULL
@@ -1326,11 +1327,12 @@ void renderer_update_view_projection_uniform_buffer(
         struct renderer_buffer* uniform_buffer,
         mat4x4 view_matrix,
         mat4x4 projection_matrix,
+        mat4x4 view_proj_matrix,
         struct camera camera,
         vec3 target)
 {
+    // View
     memset(view_matrix, 0, sizeof(mat4x4));
-
     vec3 eye = {camera.x, camera.y, camera.z};
     vec3 up = {0.0f, 0.0f, 1.0f};
 
@@ -1345,26 +1347,24 @@ void renderer_update_view_projection_uniform_buffer(
         mat4x4_look_at(view_matrix, eye, center, up);
     }
 
+    // Projection
     float aspect = (float)swapchain_extent.width/swapchain_extent.height;
-
-    // ~45 degree FOV
     mat4x4_perspective(projection_matrix, 0.78f, aspect, 0.1f, 100.0f);
     projection_matrix[1][1] *= -1;
 
-    memcpy((float*)uniform_buffer->mapped + 16 * 0,
-            view_matrix, sizeof(mat4x4));
-    memcpy((float*)uniform_buffer->mapped + 16 * 1,
-            projection_matrix, sizeof(mat4x4));
+    // Save a multiplication in the shader
+    mat4x4_mul(view_proj_matrix, projection_matrix, view_matrix);
+    memcpy((float*)uniform_buffer->mapped, view_proj_matrix, sizeof(mat4x4));
 }
 
 VkDescriptorSet renderer_get_descriptor_set(
         VkDevice device,
         VkDescriptorPool descriptor_pool,
-        VkDescriptorSetLayout* descriptor_layouts,
+        VkDescriptorSetLayout *descriptor_layouts,
         uint32_t descriptor_count,
-        struct renderer_buffer* dynamic_uniform_buffer,
-        struct renderer_buffer* view_projection_uniform_buffer,
-        struct renderer_image* tex_image)
+        struct renderer_buffer *view_projection_uniform_buffer,
+        struct renderer_buffer *dynamic_uniform_buffer,
+        struct renderer_image *tex_image)
 {
     VkDescriptorSet descriptor_set_handle;
     descriptor_set_handle = VK_NULL_HANDLE;
@@ -1385,16 +1385,16 @@ VkDescriptorSet renderer_get_descriptor_set(
     );
     assert(result == VK_SUCCESS);
 
-	VkDescriptorBufferInfo dynamic_ubo_buffer_info = {
-        .buffer = dynamic_uniform_buffer->buffer,
-        .offset = 0,
-        .range = dynamic_uniform_buffer->size
-    };
-
 	VkDescriptorBufferInfo view_projection_ubo_buffer_info = {
         .buffer = view_projection_uniform_buffer->buffer,
         .offset = 0,
         .range = view_projection_uniform_buffer->size
+    };
+
+	VkDescriptorBufferInfo dynamic_ubo_buffer_info = {
+        .buffer = dynamic_uniform_buffer->buffer,
+        .offset = 0,
+        .range = dynamic_uniform_buffer->size
     };
 
 	VkDescriptorImageInfo image_info = {
@@ -1410,9 +1410,9 @@ VkDescriptorSet renderer_get_descriptor_set(
         .dstBinding = 0,
         .dstArrayElement = 0,
         .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .pImageInfo = NULL,
-        .pBufferInfo = &dynamic_ubo_buffer_info,
+        .pBufferInfo = &view_projection_ubo_buffer_info,
         .pTexelBufferView = NULL
     };
 
@@ -1423,9 +1423,9 @@ VkDescriptorSet renderer_get_descriptor_set(
         .dstBinding = 1,
         .dstArrayElement = 0,
         .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
         .pImageInfo = NULL,
-        .pBufferInfo = &view_projection_ubo_buffer_info,
+        .pBufferInfo = &dynamic_ubo_buffer_info,
         .pTexelBufferView = NULL
     };
 
@@ -1443,8 +1443,8 @@ VkDescriptorSet renderer_get_descriptor_set(
     };
 
 	VkWriteDescriptorSet descriptor_writes[] = {
-        dynamic_ubo_descriptor_write,
         view_projection_ubo_descriptor_write,
+        dynamic_ubo_descriptor_write,
         sampler_descriptor_write
     };
 
@@ -2211,6 +2211,7 @@ void renderer_draw_frame(struct renderer_resources* resources)
         &resources->view_projection_uniform_buffer,
         resources->view_matrix,
         resources->projection_matrix,
+        resources->view_proj_matrix,
         resources->camera,
         NULL
     );
@@ -2715,7 +2716,7 @@ void renderer_create_drawable(
         .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
         .commandBufferCount = MAX_FRAMEBUFFERS
     };
-    vkAllocateCommandBuffers(resources->device, &alloc_info, &drawable->cmd);
+    vkAllocateCommandBuffers(resources->device, &alloc_info, drawable->cmd);
 
     drawable->descriptor_set = VK_NULL_HANDLE; // same reason as above
     drawable->matrix_index = 9;
