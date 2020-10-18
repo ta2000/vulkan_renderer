@@ -1,4 +1,4 @@
-# Building
+# Building on Linux
 
 ### Automake configuration
 
@@ -18,3 +18,6 @@ make
 ```
 src/main
 ```
+
+# Building on Windows
+Follow [this video](https://www.youtube.com/watch?v=LO1LnhWWIow) for setup
