@@ -1,4 +1,4 @@
-#include "table.h"
+/*#include "table.h"
 
 #include <stdlib.h>
 
@@ -28,7 +28,7 @@ char *table_search(
         if (
     }
 }
-*/
+*//*
 
 void table_insert(
     struct draw_table *draw_table,
@@ -51,3 +51,4 @@ void table_destroy(
 
     free(table->entries);
 }
+*/

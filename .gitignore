@@ -1,5 +1,6 @@
 *.swp
 main
+*.exe
 *vgcore*
 
 tags

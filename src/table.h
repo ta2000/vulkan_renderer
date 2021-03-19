@@ -1,4 +1,4 @@
-#ifndef TABLE_H_
+/*#ifndef TABLE_H_
 #define TABLE_H_
 
 #include <stdbool.h>
@@ -43,3 +43,4 @@ void table_destroy(
 );
 
 #endif
+*/

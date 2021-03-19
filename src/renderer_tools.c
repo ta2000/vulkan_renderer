@@ -8,7 +8,7 @@
 size_t renderer_get_file_size(
         const char* fname)
 {
-    FILE* fp = fopen(fname, "r");
+    FILE* fp = fopen(fname, "rb");
     assert(fp);
 
     size_t fsize;
@@ -26,7 +26,7 @@ void renderer_read_file_to_buffer(
         char** buffer,
         size_t buffer_size)
 {
-    FILE* fp = fopen(fname, "r");
+    FILE* fp = fopen(fname, "rb");
     assert(fp);
 
     assert(buffer);
@@ -67,7 +67,7 @@ uint32_t renderer_find_memory_type(
 void* aligned_alloc(size_t alignment, size_t size)
 {
     void* ptr = NULL;
-    // TODO: add windows equivalent
-    posix_memalign(&ptr, alignment, size);
+    _aligned_malloc(size, alignment);
+	// posix_memalign(&ptr, alignment, size);
     return ptr;
 }
