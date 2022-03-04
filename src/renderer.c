@@ -2108,6 +2108,7 @@ void renderer_record_draw_commands(
 
         if (drawable->updated[image_index]) {
             printf("Updating drawable for framebuffer %d\n", image_index);
+			fflush(stdout);
             drawable->updated[image_index] = false;
 
             inheritance_info.framebuffer = framebuffers[image_index];
@@ -2268,6 +2269,7 @@ void renderer_draw_frame(struct renderer_resources* resources)
     );
     if (result != VK_SUCCESS) {
         fprintf(stderr, "Error while submitting queue.\n");
+		fflush(stdout);
         exit(-1);
     }
 
